@@ -75,6 +75,11 @@ enum AmapShare {
     static func load(_ text: String) throws -> Route {
         guard let url = findUrl(text) else { throw Fail("没找到高德的分享链接") }
         guard let p = try resolve(url) else {
+            // iOS v0.13.9 行程报告分享：短链跳到 static3.amap.com/activity/2020NewDriveSafeV5/index.html?urlParameter=…
+            // 页面本身没有路线数据（Vue 单页，靠 urlParameter 往后端要），得拿 urlParameter 去 m5.amap.com 的两个接口还原
+            if let rp = first(#"[?&]urlParameter=([^&"'\s<>]+)"#, lastUrl, group: 1) {
+                return try loadReport(rp)
+            }
             throw Fail("链接里没找到路线信息（可能不是路线分享，或者链接已过期）\n最后打开的是：\(lastUrl.prefix(300))")
         }
         if p.mode.contains("motor") { return try loadMotor(p) }
@@ -98,29 +103,9 @@ enum AmapShare {
             throw Fail("高德返回的数据里没有路线")
         }
         let pl = paths[(0..<paths.count).contains(p.pathIdx) ? p.pathIdx : 0]
-        var all: [LL] = []
-        for c in pl["coords"] as? [[String: Any]] ?? [] {
-            if let la = num(c["lat"]), let lo = num(c["lon"]) { all.append((la, lo)) }
-        }
-        if all.count < 2 { throw Fail("路线是空的") }
-        // 每条路（group）= 连续几个 segment；segment 里的 link 记着在 coords 里的起止下标
-        let segs = pl["segments"] as? [[String: Any]] ?? []
-        func segRange(_ si: Int) -> (Int, Int)? {
-            guard si >= 0, si < segs.count, let links = segs[si]["links"] as? [[String: Any]], !links.isEmpty else { return nil }
-            let b = Int(num(links[0]["begin_index"]) ?? -1), e = Int(num(links[links.count - 1]["end_index"]) ?? -1)
-            return b >= 0 && e >= b ? (b, e) : nil
-        }
-        var roads: [Road] = []
-        for g in pl["group"] as? [[String: Any]] ?? [] {
-            let s0 = Int(num(g["start_id"]) ?? -1), n = Int(num(g["count"]) ?? 1)
-            guard let a = segRange(s0) else { continue }
-            let b = segRange(s0 + n - 1) ?? a
-            let from = min(all.count - 1, max(0, a.0)), to = min(all.count - 1, max(from, b.1))
-            roads.append(Road(name: g["name"] as? String ?? "", length: int(g["dist"]), pts: Array(all[from...to])))
-        }
-        return Route(startName: p.sName, startLat: p.sLat, startLng: p.sLng, endName: p.eName, endLat: p.eLat, endLng: p.eLng,
-                     pts: dedup(all), roads: roads, distance: int(pl["distance"]), timeS: int(pl["travel_time"]),
-                     lights: int(pl["traffic_light_count"]), restored: (j["isRestoreRoute"] as? Bool) ?? false, kind: "摩托车")
+        return try route(fromPath: pl, startName: p.sName, startLat: p.sLat, startLng: p.sLng,
+                         endName: p.eName, endLat: p.eLat, endLng: p.eLng, kind: "摩托车",
+                         restored: (j["isRestoreRoute"] as? Bool) ?? false)
     }
 
     /// 驾车路线：m.amap.com/service/navigation/driving.json
@@ -151,6 +136,77 @@ enum AmapShare {
         return Route(startName: p.sName, startLat: p.sLat, startLng: p.sLng, endName: p.eName, endLat: p.eLat, endLng: p.eLng,
                      pts: dedup(all), roads: roads, distance: int(pl["distance"]), timeS: int(pl["drivetime"]),
                      lights: lights, restored: (j["isRestoreRoute"] as? Bool) ?? false, kind: "驾车")
+    }
+
+    /// 把一条高德路线数据变成 Route。手机网页的 motor 接口（data.paths[0]）和
+    /// 行程报告还原接口（restorationInfo.route.paths[0]）结构一样，都用这个
+    private static func route(fromPath pl: [String: Any], startName: String, startLat: Double, startLng: Double,
+                              endName: String, endLat: Double, endLng: Double, kind: String, restored: Bool) throws -> Route {
+        var all: [LL] = []
+        for c in pl["coords"] as? [[String: Any]] ?? [] {
+            if let la = num(c["lat"]), let lo = num(c["lon"]) { all.append((la, lo)) }
+        }
+        if all.count < 2 { throw Fail("路线是空的") }
+        // 每条路（group）= 连续几个 segment；segment 里的 link 记着在 coords 里的起止下标
+        let segs = pl["segments"] as? [[String: Any]] ?? []
+        func segRange(_ si: Int) -> (Int, Int)? {
+            guard si >= 0, si < segs.count, let links = segs[si]["links"] as? [[String: Any]], !links.isEmpty else { return nil }
+            let b = Int(num(links[0]["begin_index"]) ?? -1), e = Int(num(links[links.count - 1]["end_index"]) ?? -1)
+            return b >= 0 && e >= b ? (b, e) : nil
+        }
+        var roads: [Road] = []
+        for g in pl["group"] as? [[String: Any]] ?? [] {
+            let s0 = Int(num(g["start_id"]) ?? -1), n = Int(num(g["count"]) ?? 1)
+            guard let a = segRange(s0) else { continue }
+            let b = segRange(s0 + n - 1) ?? a
+            let from = min(all.count - 1, max(0, a.0)), to = min(all.count - 1, max(from, b.1))
+            roads.append(Road(name: g["name"] as? String ?? "", length: int(g["dist"]), pts: Array(all[from...to])))
+        }
+        return Route(startName: startName, startLat: startLat, startLng: startLng,
+                     endName: endName, endLat: endLat, endLng: endLng,
+                     pts: dedup(all), roads: roads, distance: int(pl["distance"]), timeS: int(pl["travel_time"]),
+                     lights: int(pl["traffic_light_count"]), restored: restored, kind: kind)
+    }
+
+    /// 行程报告分享（高德「导航结束 → 分享行程」或「我的足迹 → 分享」）：
+    /// 短链 → static3.amap.com/activity/2020NewDriveSafeV5/index.html?urlParameter=…
+    /// 拿 urlParameter 调两个接口：
+    /// 1. m5.amap.com/ws/share/lbs/info          取起点、终点、导航类型（2 驾车 / 9 摩托车）
+    /// 2. m5.amap.com/ws/share/lbs/route/restoration  取整条路线（coords/group/segments，和 motor 接口同结构）
+    private static func loadReport(_ rawParam: String) throws -> Route {
+        // urlParameter 在网址里是 URL 编码的（含 %2B/%3D），接口要的就是这个编码后的原样
+        let p = enc(fullDecode(rawParam))
+        let info = try json(try get("https://m5.amap.com/ws/share/lbs/info?param=\(p)").body)
+        guard int(info["code"]) == 1, let idata = info["data"] as? [String: Any] else {
+            throw Fail("高德没有返回这趟行程（可能分享已过期或被取消）")
+        }
+        let member = (idata["shareMembers"] as? [[String: Any]])?.first ?? [:]
+        let dinfo = member["driveInfo"] as? [String: Any] ?? [:]
+        let oi = dinfo["otherInfo"] as? [String: Any] ?? [:]
+        let dest = oi["destination"] as? [String: Any] ?? [:]
+        let outset = oi["outset"] as? [String: Any] ?? [:]
+        // 高德坐标：x = 经度、y = 纬度
+        guard let eLng = num(dest["x"]), let eLat = num(dest["y"]) else {
+            throw Fail("这趟行程没有终点信息（可能导航还没结束）")
+        }
+        let sLng = num(outset["x"]) ?? eLng, sLat = num(outset["y"]) ?? eLat
+        let sName = (outset["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "分享的起点"
+        let eName = (dest["name"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "分享的终点"
+        let kind = int(dinfo["naviType"]) == 9 ? "摩托车" : "驾车"
+
+        let resto = try json(try get("https://m5.amap.com/ws/share/lbs/route/restoration?param=\(p)").body)
+        guard int(resto["code"]) == 1, let rd = resto["data"] as? [String: Any],
+              let rs = rd["restorationInfo"] as? String,
+              let rData = rs.data(using: .utf8),
+              let rObj = try? JSONSerialization.jsonObject(with: rData),
+              let rj = rObj as? [String: Any],
+              let rroute = rj["route"] as? [String: Any],
+              let pl = (rroute["paths"] as? [[String: Any]])?.first else {
+            throw Fail("高德没返回这条路线（可能分享已过期）")
+        }
+        return try route(fromPath: pl, startName: sName, startLat: sLat, startLng: sLng,
+                         endName: eName, endLat: eLat, endLng: eLng, kind: kind,
+                         restored: int(rroute["code"]) == 1)
     }
 
     // MARK: - 解析分享链接

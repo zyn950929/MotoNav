@@ -1,8 +1,12 @@
-# MotoNav iOS v0.13.8
+# MotoNav iOS v0.13.9
 
 与 Android 共用本仓库 1.75 英寸圆屏固件及 BLE 协议。原始 iOS 工程来自用户提供的 MotoNav-iOS，整合后的源代码保存在此目录；原目录未修改。
 
 预编译 IPA 安装请看 [Sideloadly 安装教程](../docs/INSTALL-IOS.md)。公开版本使用通用包名，地图 Key 按重签后的实际 Bundle ID 申请。
+
+## 0.13.9 高德「行程报告」分享导入
+
+导航结束后分享的「行程报告」链接、以及「我的足迹」里分享的路线，现在也能粘贴还原。短链跳到高德活动页（`?urlParameter=…`），页面本身不含路线数据；App 截取 `urlParameter` 调 `m5.amap.com/ws/share/lbs/info` 与 `route/restoration` 两个接口，按 `naviType` 自动识别驾车（2）或摩托车（9），沿用原有导航发图路径，不新增固件协议。详情见 [更新说明](../docs/RELEASE-IOS-0.13.9.md)。
 
 ## 0.13.8 到达动画修复
 
