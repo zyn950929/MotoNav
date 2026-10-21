@@ -1,0 +1,49 @@
+{
+  "name": "M5PM1",
+  "version": "1.0.6",
+  "description": "M5Stack PM1 Power Management IC Driver Library",
+  "keywords": [
+    "m5stack",
+    "pm1",
+    "power-management",
+    "i2c",
+    "esp32",
+    "arduino"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/m5stack/M5PM1.git"
+  },
+  "authors": [
+    {
+      "name": "M5Stack",
+      "email": "m5stack@m5stack.com",
+      "url": "https://m5stack.com",
+      "maintainer": true
+    }
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/m5stack/M5PM1",
+  "frameworks": [
+    "arduino",
+    "espidf"
+  ],
+  "platforms": [
+    "espressif32"
+  ],
+  "export": {
+    "include": [
+      "src/*",
+      "library.json",
+      "library.properties",
+      "CMakeLists.txt",
+      "idf_component.yml",
+      "LICENSE",
+      "README.md"
+    ]
+  },
+  "build": {
+    "srcDir": "src",
+    "includeDir": "src"
+  }
+}

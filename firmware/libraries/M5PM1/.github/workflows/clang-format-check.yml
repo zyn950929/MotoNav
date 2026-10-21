@@ -1,0 +1,61 @@
+name: clang-format Check
+
+env:
+  INCLUDE_REGEX: ^.*\.((((c|C)(c|pp|xx|\+\+)?$)|((h|H)h?(pp|xx|\+\+)?$))|(inl|ino|pde|proto|cu))$
+
+on:
+  push:
+    tags-ignore:
+      - '*.*.*'
+      - 'v*.*.*'
+    branches:
+      - '*'
+    paths:
+      - '*'
+      - '**.ino'
+      - '**.cpp'
+      - '**.hpp'
+      - '**.h'
+      - '**.c'
+      - '**.inl'
+      - '**clang-format-check.yml'
+      - '**.clang-format'
+  pull_request:
+    paths:
+      - '**.ino'
+      - '**.cpp'
+      - '**.hpp'
+      - '**.h'
+      - '**.c'
+      - '**.inl'
+      - '**clang-format-check.yml'
+      - '**.clang-format'
+  workflow_dispatch:
+
+jobs:
+  formatting-check:
+    name: Formatting Check
+    runs-on: [self-hosted, Linux, X64]
+    strategy:
+      matrix:
+        path:
+          - check: './'    # path to include
+            exclude: ''    # path to exclude
+          #- check: 'src'
+          #  exclude: '(Fonts)' # Exclude file paths containing "Fonts"
+          #- check: 'examples'
+          #  exclude: ''
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Run clang-format style check for C/C++/Protobuf programs.
+        uses: jidicula/clang-format-action@v4.10.2 # Using include-regex 10.x or later
+        with:
+          clang-format-version: '18'
+          check-path: ${{ matrix.path['check'] }}
+          exclude-regex: ${{ matrix.path['exclude'] }}
+          include-regex: ${{ env.INCLUDE_REGEX }}
