@@ -47,6 +47,9 @@ import Foundation
 //   iOS v0.7.1 Bundle ID 从示例用的 com.example.motonav 换成 com.example.motonav（分享扩展 com.example.motonav.share）。
 //             手机上会变成一个新 App：设置、Key、最近去过都要重新来；高德 key 要绑新的 Bundle ID
 //   iOS v0.7.2 搜索失败时把高德的错误代码翻译成大白话：key 和 Bundle ID 对不上（1008/1009）、key 无效、次数用完、没权限
-let APP_VERSION = "iOS v0.13.8"
+//   iOS v0.13.9 支持导入高德「行程报告」分享（导航结束→分享行程 / 我的足迹→分享）：短链里的 urlParameter
+//             经 m5.amap.com/ws/share/lbs 的 info + route/restoration 两个接口还原起终点和整条路线，
+//             按 naviType 自动识别驾车 / 摩托车
+let APP_VERSION = "iOS v0.13.9"
 
 // 高德 key、天地图 key 不再写在代码里（iOS v0.7 起）：用户在 App 的「Key 设置」里填，存在手机上，见 Settings.swift
