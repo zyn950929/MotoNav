@@ -32,7 +32,7 @@ python3 firmware/package_flasher.py --tools-dir /path/to/esptool-files
 
 工具目录需包含 esptool.exe 及许可说明。完整解压生成的 ZIP 后运行“一键烧录.bat”，默认选应用升级。`flash.ps1 -VerifyOnly` 仅检查文件与工具，不访问串口。
 
-Mac 使用仓库根目录的 `一键烧录固件.command`；工具、镜像清单与详细步骤见 [firmware/README.md](../firmware/README.md)。
+Mac 下载独立 `macOS-OneClick.zip`，完整解压后双击包内 `一键烧录.command`；镜像和原生工具已包含。详见 [firmware/README.md](../firmware/README.md)。
 
 ## 验证范围
 

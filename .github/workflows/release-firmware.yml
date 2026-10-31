@@ -1,12 +1,10 @@
-name: Verify and publish universal firmware
+name: Verify universal firmware
 on:
   push:
     branches: [main]
     paths:
-      - firmware/RELEASE_VERSION
-      - firmware/tests/**
+      - firmware/**
       - .github/workflows/release-firmware.yml
-      - scripts/release-firmware.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,21 +15,8 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    outputs:
-      has_payload: ${{ steps.payload.outputs.present }}
     steps:
       - uses: actions/checkout@v4
-      - name: Detect a version-matched binary payload
-        id: payload
-        shell: bash
-        run: |
-          VERSION=$(tr -d '\r\n' < firmware/RELEASE_VERSION)
-          if [ -f "firmware/releases/$VERSION/manifest.json" ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "Source-only firmware update: tests run, binary publishing skipped."
-          fi
       - name: Test media, rotation, idle shutdown and flashing rules
         shell: bash
         run: |
@@ -42,21 +27,5 @@ jobs:
           done
           cc firmware/tests/idle-power-off-test.c -o /tmp/motonav-idle
           /tmp/motonav-idle
-          python3 -m unittest discover -s firmware/tests -p 'test_flash_macos.py'
-  release:
-    if: needs.tests.outputs.has_payload == 'true'
-    needs: tests
-    runs-on: windows-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Verify original package and publish firmware assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: python scripts/release-firmware.py
+          python3 firmware/build.py --help
+          python3 firmware/package_flasher.py --help

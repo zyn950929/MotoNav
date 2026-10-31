@@ -64,7 +64,7 @@
   "trafficCountdownExperimental": true,
   "trafficCountdownContinuedAvailabilityGuaranteed": false,
   "thirdPartyCarAPKIncluded": false,
-  "releaseNotes": "docs/RELEASE-2026-10-25.md",
+  "releaseNotes": "docs/RELEASE-2026-11-01.md",
   "androidFusionBuildVerified": true,
   "androidFusionSignatureAlignmentVerified": true,
   "androidFusionPolicyTestGroups": 19,

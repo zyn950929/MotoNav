@@ -45,7 +45,7 @@ Mac 安装 Xcode 与 CocoaPods 1.16.2 后，在仓库根目录运行：
 bash build-ios.sh
 ```
 
-使用 `ios/Podfile.lock` 锁定依赖，输出 `output/ios/MotoNav-0.16.0-build12-unsigned.ipa`。也可执行旧入口 `bash scripts/build-ios-local.sh`，它转到同一构建流程。
+使用 `ios/Podfile.lock` 锁定依赖，输出 `output/ios/MotoNav-0.16.0-build12-unsigned.ipa`。统一使用根目录的 `bash build-ios.sh` 入口。
 
 签名时保留并签名 MotoNavShare 分享扩展。覆盖升级需沿用实际安装的 Bundle ID 与签名身份，避免先卸载导致本地配置和记录丢失。
 

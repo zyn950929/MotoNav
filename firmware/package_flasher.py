@@ -1,10 +1,39 @@
 #!/usr/bin/env python3
 """Package existing, verified 1.75 images. Does not connect to or flash hardware."""
 from pathlib import Path
-import argparse, hashlib, importlib.util, json, os, re, shutil, zipfile
+import argparse, hashlib, json, os, re, shutil, subprocess, zipfile
 
 ROOT=Path(__file__).resolve().parents[1]
 sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+
+
+def verify_windows(package):
+    """Validate the generated package without opening any serial port."""
+    command=['powershell.exe','-NoProfile','-ExecutionPolicy','Bypass',
+             '-File',str(package/'flash.ps1'),'-VerifyOnly']
+    def check_case(label,success):
+        result=subprocess.run(command,cwd=ROOT,capture_output=True)
+        if (result.returncode==0)!=success:
+            raise ValueError(label+' failed: '+result.stdout.decode('utf8',errors='replace')+
+                             result.stderr.decode('utf8',errors='replace'))
+        print(label+': PASS',flush=True)
+    check_case('Fresh package and bundled esptool',True)
+    manifest_path=package/'firmware-manifest.json'
+    manifest=json.loads(manifest_path.read_text(encoding='utf-8-sig'))
+    app=package/manifest['boards'][0]['versions'][0]['panels'][0]['app']['path']
+    original_app=app.read_bytes()
+    try:
+        damaged=bytearray(original_app);damaged[80]^=1;app.write_bytes(damaged)
+        check_case('Corrupted firmware is rejected',False)
+    finally:app.write_bytes(original_app)
+    original_manifest=manifest_path.read_bytes()
+    try:
+        manifest['boards'][0]['versions'][0]['panels'][0]['app']['path']='../outside.bin'
+        manifest_path.write_text(json.dumps(manifest),encoding='utf8')
+        check_case('Outside firmware path is rejected',False)
+    finally:manifest_path.write_bytes(original_manifest)
+    check_case('Restored package is valid',True)
+
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
@@ -49,8 +78,7 @@ def main():
         verification.update(supplied)
     (package/'firmware-verification.json').write_text(json.dumps(verification,indent=2)+'\n','utf8')
     if os.name=='nt':
-        spec=importlib.util.spec_from_file_location('release_verify',ROOT/'scripts/release-firmware.py')
-        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);module.verify_windows(package)
+        verify_windows(package)
     sums=package/'SHA256SUMS.txt'
     sums.write_text(''.join(sha(p)+'  '+p.relative_to(package).as_posix()+'\n' for p in sorted(package.rglob('*')) if p.is_file() and p!=sums),'utf8')
     archive=out/(name+'.zip')
@@ -59,11 +87,11 @@ def main():
             if p.is_file():z.write(p,p.relative_to(out).as_posix())
     source_zip=out/f'MotoNav-Firmware-Source-1.75-v{version}.zip'
     with zipfile.ZipFile(source_zip,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:
-        for base in ['firmware/boards/175','firmware/libraries','firmware/tests','firmware/windows-flasher','licenses']:
+        for base in ['firmware/boards/175','firmware/libraries','firmware/tests','firmware/windows-flasher','firmware/macos-flasher','licenses']:
             for p in sorted((ROOT/base).rglob('*')):
                 if p.is_file() and not any(x in p.parts for x in ['__pycache__','.build','build']) and p.suffix not in ['.pyc','.exe','.pdb']:
                     z.write(p,'MotoNav/'+p.relative_to(ROOT).as_posix())
-        for rel in ['LICENSE.md','firmware/README.md','firmware/build.py','firmware/build.ps1','firmware/package_flasher.py','firmware/flash_macos.py','一键烧录固件.command',f'docs/RELEASE-FIRMWARE-{version}.md']:
+        for rel in ['LICENSE.md','firmware/README.md','firmware/RELEASE_VERSION','firmware/build.py','firmware/build.ps1','firmware/package_flasher.py',f'docs/RELEASE-FIRMWARE-{version}.md']:
             z.write(ROOT/rel,'MotoNav/'+rel)
     flat=out/f'MotoNav-universal-firmware-{version}.zip'
     with zipfile.ZipFile(flat,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as z:

@@ -50,4 +50,4 @@ python build-countdown.py --apktool 'D:\Tools\apktool.jar' --gradle 'D:\Tools\gr
 
 源码回归：JDK 17 下运行 `python tests/run.py`；下载校验：`python tests/test_provider_download.py`。本次完成完整构建与策略回归；未重新做完整实路、耗电、温度测试。
 
-[本次更新与验证范围](../../docs/RELEASE-2026-11-01.md) · [许可](../../LICENSE.md) · [第三方说明](../../licenses/)
+[本次更新与验证范围](../../docs/RELEASE-2026-11-01.md) · [许可](../../LICENSE.md) · [第三方说明](../../licenses)

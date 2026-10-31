@@ -73,10 +73,10 @@ App 内使用自己的高德 iOS Key，申请时填写最终实际 Bundle ID。i
 
 **红绿灯读秒是实验功能，不保证一直有效，也不保证每个路口、每个方向都有数据。** 地区、数据源、定位、网络和系统后台限制都可能影响结果；缺少的数据不会补造，必须以现场信号为准。
 
-自主功能代码全程借助 AI 开发与迭代，维护者提出需求并参与设备和路测验证。第三方 SDK、库、兼容组件不属于项目原创；代码与第三方资源的权利归属以 [许可](LICENSE.md)、[第三方说明](licenses/) 为准。
+自主功能代码全程借助 AI 开发与迭代，维护者提出需求并参与设备和路测验证。第三方 SDK、库、兼容组件不属于项目原创；代码与第三方资源的权利归属以 [许可](LICENSE.md)、[第三方说明](licenses) 为准。
 
 感谢 [nongxl](https://github.com/nongxl) 的省电优化贡献；single.32 保留其 PR #9 基础及兼容修正。iOS UI 来源为 [coolcoolmanman-design](https://github.com/coolcoolmanman-design/MotoNav)，见 [来源与致谢](ios/UI-SOURCE-NOTICE.md)。近期其他 PR 的来源和历史提交仍保留，但不把它们当作本次读秒版的实际实现。
 
 **使用本套程序请遵守交通法规，使用即表示自愿承担可能带来的交通事故及其他风险。** 行驶中不要操作设备，路线、图标和读秒不能代替现场信号与标志；本提示不排除依法不能免除的责任。项目仍可能存在错误，测试回放不等于实际道路验证。
 
-历史更新保存在 [docs](docs/) 和 [历史 Releases](https://github.com/zyn950929/MotoNav/releases)，版本以本页顶部为准。
+当前帮助见[文档目录](docs/README.md)，旧更新说明归入[历史资料](docs/archive/README.md)。历史安装与烧录包保留在 [Releases](https://github.com/zyn950929/MotoNav/releases)，版本以本页顶部为准。

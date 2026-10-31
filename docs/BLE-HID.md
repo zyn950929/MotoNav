@@ -4,7 +4,7 @@
 
 ## 安装和使用
 
-在已准备好固件的 Mac 上，可连接 USB 数据线后双击仓库根目录 `一键烧录固件.command`，默认执行应用升级；追加 `--check` 仅检查，不烧录。
+Mac 请从[当前下载页](https://github.com/zyn950929/MotoNav/releases/tag/motonav-2026.11.01)获取独立 macOS 一键烧录 ZIP，完整解压后双击包内 `一键烧录.command`。默认升级保留设置；`检查环境.command` 只检查，不烧录。
 
 1. 为 Waveshare ESP32-S3-Touch-AMOLED-1.75 刷入 v7.10.0 或更新固件。已有对应分区的 MotoNav 使用 `app_0x10000` 镜像；首次安装才使用 `full_0x0`。完整镜像可能覆盖原设置，应先备份。
 2. 安装仓库 iOS v0.11.0 或更新版。首页“圆屏设置”打开“蓝牙媒体按键（QQ 音乐等）”，默认开启。
