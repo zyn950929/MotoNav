@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: motonav-ios-ui-review-build2
   cancel-in-progress: true
@@ -18,11 +19,23 @@ jobs:
       - name: Start simulator early
         run: python3 ui-review/capture.py boot
       - uses: actions/cache/restore@v4
+        id: pods
         with:
           path: |
             ~/Library/Caches/CocoaPods
             ~/.cocoapods/repos
           key: ios-pods-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
+      - name: Reuse previously verified public SDK cache
+        if: steps.pods.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/LockedSDK" "$HOME/Library/Caches"
+          if gh run download 41173836576 -R zyn950929/MotoNav -n ios-locked-pods-cache -D "$RUNNER_TEMP/LockedSDK"; then
+            tar -xzf "$RUNNER_TEMP/LockedSDK/ios-locked-pods-cache.tar.gz" -C "$HOME/Library/Caches"
+          else
+            echo 'Verified cache unavailable; CocoaPods will download the locked SDK versions.'
+          fi
       - name: Install locked dependencies
         working-directory: ios
         timeout-minutes: 10

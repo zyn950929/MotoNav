@@ -314,7 +314,7 @@ struct ContentView: View {
                     case .about:
                         CardView {
                             Text("关于").foregroundColor(AppTheme.text).bold()
-                            Text(APP_VERSION).font(.footnote).foregroundColor(AppTheme.sub)
+                            Text("\(APP_VERSION) · Build \(Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "2")").font(.footnote).foregroundColor(AppTheme.sub)
                             Text("AI 辅助开发 · 仅供非商业使用")
                                 .font(.caption).foregroundColor(AppTheme.sub)
                         }
@@ -470,7 +470,7 @@ struct ContentView: View {
                     .onChange(of: query) { if $0.isEmpty { search.clear() } }
                 Button("搜索") { hideKeyboard(); if !needAmapKey() { search.search(query) } }
                     .font(.headline)
-                    .foregroundColor(AppTheme.text)
+                    .foregroundColor(.white)
                     .padding(.horizontal, 16).padding(.vertical, 12)
                     .background(RoundedRectangle(cornerRadius: 12).fill(ContentView.pink))
             }
