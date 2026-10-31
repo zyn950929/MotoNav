@@ -14,6 +14,33 @@ enum MapCoveragePolicy {
     static func lookahead(kmh: Int, half: Double = 1200, preferred: Double = 450) -> Double {
         max(0, min(preferred, half - radius(kmh: kmh) - 180))
     }
+    /// Time until the current raster ceases to cover the viewport. Follow the
+    /// actual route through bends; do not assume the present heading is permanent.
+    static func remainingSeconds(x:Double,y:Double,cx:Double,cy:Double,kmh:Int,bearing:Double?,plan:RouteMapPlan?=nil,progress:Double = -1)->Double {
+        let speed=max(120,kmh)
+        guard covers(x:x,y:y,cx:cx,cy:cy,kmh:speed,margin:50) else {return 0}
+        if kmh<6 {return 60}
+        let velocity=Double(kmh)/3.6
+        let point=plan.map{$0.at(progress)}
+        let follow=progress>=0 && point.map{hypot(x-$0.x,y-$0.y)<100} == true
+        for tick in 1...120 {
+            let seconds=Double(tick)/2,delta=velocity*seconds
+            let px:Double,py:Double
+            if follow,let plan=plan,let point=point {
+                let future=plan.at(progress+delta)
+                px=future.x+(x-point.x);py=future.y+(y-point.y)
+            } else if let bearing=bearing {
+                let radians=bearing * .pi/180
+                px=x+sin(radians)*delta;py=y+cos(radians)*delta
+            } else {
+                // With no trustworthy trajectory, use the closest edge.
+                if max(abs(x-cx),abs(y-cy))+delta+radius(kmh:speed)+50>1200 {return max(0,seconds-0.5)}
+                continue
+            }
+            if !covers(x:px,y:py,cx:cx,cy:cy,kmh:speed,margin:50) {return max(0,seconds-0.5)}
+        }
+        return 60
+    }
     static func needsRefresh(x: Double, y: Double, cx: Double, cy: Double, bearing: Double, kmh: Int,
                              preparationSeconds: Double = 12) -> Bool {
         // Leave time for rendering, processing and BLE delivery before the current map expires.

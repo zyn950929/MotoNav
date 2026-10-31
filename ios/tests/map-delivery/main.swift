@@ -151,3 +151,18 @@ check(!late.discardObsolete(x:0,y:0,kmh:120,allowed:[(0,0),(0,600)]),"early usab
 late.stage(.init(bytes:Data([8]),cx:0,cy:-600,sat:false,type:3,info:"",source:3,style:1))
 check(!late.discardObsolete(x:0,y:0,kmh:120,allowed:[(0,0),(0,-600)]),"route through a hairpin must not be mistaken for a stale behind-heading block")
 print("PASS late staged-map blockage reproduced and cleared; early and hairpin route packets retained")
+
+// Build9's fixed four-second/25KBps gates could suppress all detail even on a
+// link that has enough time between confirmed overlapping base maps.
+let roofPlan=try RouteMapPlan([(x:0,y:0),(x:0,y:5000)])
+let roomy=MapCoveragePolicy.remainingSeconds(x:0,y:300,cx:0,cy:600,kmh:120,bearing:0,plan:roofPlan,progress:300)
+check(roomy>=20 && roomy<=21,"confirmed ahead-centred map gives an actual twenty-second coverage window")
+check(MapDeliveryPolicy.roofsFit(kmh:120,bytes:127289,rate:15000,coverageSeconds:roomy,nextBaseBytes:44539),"restore real cached roofs below the old blanket bandwidth gate")
+let urgentRoof=MapCoveragePolicy.remainingSeconds(x:0,y:900,cx:0,cy:600,kmh:120,bearing:0,plan:roofPlan,progress:900)
+check(urgentRoof<=2.5 && !MapDeliveryPolicy.roofsFit(kmh:120,bytes:127289,rate:15000,coverageSeconds:urgentRoof,nextBaseBytes:44539),"roof upgrade cannot consume time needed for imminent road handoff")
+let bend=try RouteMapPlan([(x:0,y:0),(x:0,y:300),(x:2000,y:300)])
+let throughTurn=MapCoveragePolicy.remainingSeconds(x:0,y:290,cx:0,cy:600,kmh:120,bearing:0,plan:bend,progress:290)
+check(throughTurn<13,"deadline follows the route turn rather than extrapolating straight toward the map centre")
+check(MapCoveragePolicy.remainingSeconds(x:0,y:1200,cx:0,cy:600,kmh:120,bearing:0)==0,"a currently uncovered map offers no detail budget")
+check(MapCoveragePolicy.remainingSeconds(x:0,y:300,cx:0,cy:600,kmh:0,bearing:nil)==60,"stopped view allows detail recovery")
+print("PASS building recovery below old speed/rate gates, real route coverage deadlines, bend prediction and next-road reservation")

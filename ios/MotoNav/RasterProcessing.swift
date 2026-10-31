@@ -230,13 +230,12 @@ enum AmapBuildings {
 
 /// Keep essential roads in front of optional roofs on a measured, slow link.
 enum MapDeliveryPolicy {
-    static func roofsFit(kmh:Int,bytes:Int,rate:Double?)->Bool {
-        if kmh<60 {return true}
-        guard let rate=rate,rate.isFinite,rate>0 else {return false}
-        return Double(bytes)/rate<=4
-    }
-    static func mayPrepareRoofs(kmh:Int,rate:Double?)->Bool {
-        kmh<60 || (rate ?? 0)>=25000
+    static func roofsFit(kmh:Int,bytes:Int,rate:Double?,coverageSeconds:Double,nextBaseBytes:Int=0)->Bool {
+        if kmh<6 {return true}
+        guard let rate=rate,rate.isFinite,rate>0,coverageSeconds.isFinite,coverageSeconds>0 else {return false}
+        // The measured rate already includes ATT waits and competing position traffic.
+        // Reserve the next road packet plus a margin before this viewport expires.
+        return Double(bytes+max(0,nextBaseBytes))/rate+1<=coverageSeconds
     }
     /// Unlike a colour-only legacy conversion, re-RLE the merged runs so the
     /// missing roof layer actually reduces bytes. No 1.44M-pixel expansion.

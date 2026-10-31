@@ -57,10 +57,14 @@ check(RasterPacket.valid(base) && !RasterPacket.isBuilding(base),"compact road p
 let decoded=RasterPacket.decode(base)!
 for i in idx.indices {check(decoded[i]==(idx[i]>3 ? idx[i]&2:idx[i]),"roof removal preserves underlying park/ground and every road pixel")}
 check(base.count<roofs.count/4,"roof removal must merge RLE runs, not merely relabel colours at the old byte count")
-check(!MapDeliveryPolicy.roofsFit(kmh:120,bytes:127289,rate:3600),"actual slow link cannot block roads with full roofs")
-check(MapDeliveryPolicy.roofsFit(kmh:0,bytes:127289,rate:3600),"stationary detail remains available")
-check(MapDeliveryPolicy.roofsFit(kmh:120,bytes:127289,rate:40000),"sufficient measured bandwidth allows highway detail")
-check(!MapDeliveryPolicy.mayPrepareRoofs(kmh:120,rate:3600),"deferred roofs do not burn extra GPU passes")
+check(!MapDeliveryPolicy.roofsFit(kmh:120,bytes:127289,rate:3600,coverageSeconds:20),"actual slow link cannot block roads with full roofs")
+check(MapDeliveryPolicy.roofsFit(kmh:0,bytes:127289,rate:3600,coverageSeconds:60),"stationary detail remains available")
+check(MapDeliveryPolicy.roofsFit(kmh:120,bytes:127289,rate:40000,coverageSeconds:20,nextBaseBytes:44539),"sufficient measured bandwidth allows highway detail")
+check(MapDeliveryPolicy.roofsFit(kmh:120,bytes:127289,rate:15000,coverageSeconds:20,nextBaseBytes:44539),"building detail can fit a real coverage window even below the old 25 KB/s gate")
+check(!MapDeliveryPolicy.roofsFit(kmh:120,bytes:127289,rate:15000,coverageSeconds:10,nextBaseBytes:44539),"detail leaves a transfer budget for the next base map")
+check(!MapDeliveryPolicy.roofsFit(kmh:120,bytes:127289,rate:3600,coverageSeconds:20,nextBaseBytes:44539),"genuinely slow links still protect essential roads")
+check(!MapDeliveryPolicy.roofsFit(kmh:120,bytes:127289,rate:nil,coverageSeconds:20),"unmeasured moving link starts with roads")
+check(MapDeliveryPolicy.roofsFit(kmh:0,bytes:127289,rate:nil,coverageSeconds:60),"stationary detail resumes without a speed or bandwidth prerequisite")
 print("PASS credit-aware batching, route/position fairness, real K receipt gates, bounded probes, measured wire rate, compact base and optional roofs")
 print("Compact map fixture: full=\(roofs.count), base=\(base.count)")
 

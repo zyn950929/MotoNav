@@ -16,7 +16,6 @@ final class RouteOfflineMaps {
     private let worker = DispatchQueue(label: "motonav.route-offline", qos: .utility)
     private let token = MapWorkToken()
     private var jobToken: MapWorkToken?
-    private var jobIsBuilding=false
     private let foregroundBusy: () -> Bool
     private let currentSpeed: () -> Int
     private let onReady: (RouteMapPlan.Node) -> Void
@@ -56,7 +55,7 @@ final class RouteOfflineMaps {
         }
     }
     private func pump() {
-        if busy, foregroundBusy() || (jobIsBuilding && !MapDeliveryPolicy.mayPrepareRoofs(kmh:currentSpeed(),rate:BleLink.shared.mapBytesPerSecond)) {jobToken?.cancel()}
+        if busy,foregroundBusy() {jobToken?.cancel()}
         guard !token.isCancelled, !busy else { return }
         let count = ready.filter { $0 }.count, baseCount = baseReady.filter { $0 }.count
         if count == ready.count {
@@ -68,14 +67,15 @@ final class RouteOfflineMaps {
         }
         guard !foregroundBusy() else { return }
         let now=Date()
-        let prepareRoofs=buildings && MapDeliveryPolicy.mayPrepareRoofs(kmh:currentSpeed(),rate:BleLink.shared.mapBytesPerSecond)
+        // Preparation is independent of BLE throughput. Nearby roads still win
+        // in RouteMapPreparationPolicy; cache roofs ahead even at highway speed.
+        let prepareRoofs=buildings
         guard let next=RouteMapPreparationPolicy.next(base:baseReady,complete:ready,display:display,target:target,
             buildings:prepareRoofs,kmh:currentSpeed(),available:retryAt.map{now >= $0}) else {
-                if buildings && !prepareRoofs {onStatus("附近道路已准备，高速行驶优先保证底图，稍后补充建筑")}
                 return
         }
         let i=next.index,includeBuildings=next.buildings
-        busy = true;jobIsBuilding=includeBuildings
+        busy = true
         let node = plan.nodes[i]
         onStatus("沿线离线地图：\(baseCount)/\(ready.count) 块可用，下载第 \(i + 1) 块\(includeBuildings ? "（补齐建筑）" : "（普通底图优先）")")
         let job = MapWorkToken(); jobToken = job
