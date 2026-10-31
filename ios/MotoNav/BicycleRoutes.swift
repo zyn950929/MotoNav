@@ -56,6 +56,16 @@ enum BicycleRouteParser {
         guard total>=3,total<=5_000_000 else {throw AmapShare.Fail("自行车路线长度无效")}
         return MotorRoute(request:request,points:all,steps:steps,seconds:max(0,path.duration),detailedGuidance:detailed)
     }
+    static func routes(_ paths: [Path], request: MotorRequest) throws -> [MotorRoute] {
+        var result: [MotorRoute]=[]
+        var failure: Error=AmapShare.Fail("高德没有返回自行车路线")
+        for path in paths.prefix(10) {
+            do {result.append(try parse(path,request:request))}
+            catch {failure=error}
+        }
+        guard !result.isEmpty else {throw failure}
+        return result
+    }
 }
 
 /// Public iOS SDK bicycle planning. No driving conversion or electric-bike fallback.
@@ -99,14 +109,14 @@ final class BicycleRouteQuery: NSObject {
         do {
             let paths=response?.route?.paths ?? []
             guard !paths.isEmpty else { throw AmapShare.Fail("高德没有返回自行车路线") }
-            let routes=try paths.prefix(10).map { path -> MotorRoute in
+            let options=paths.prefix(10).map { path -> BicycleRouteParser.Path in
                 let segments=(path.steps ?? []).map{BicycleRouteParser.Segment(polyline:$0.polyline ?? "",instruction:$0.instruction ?? "",road:$0.road ?? "",action:$0.action ?? "",distance:$0.distance,duration:$0.duration)}
                 let pathLine=path.polyline?.trimmingCharacters(in:.whitespacesAndNewlines) ?? ""
                 // A response-level polyline is unambiguous only for a single alternative.
                 let fullLine=pathLine.isEmpty && paths.count==1 ? (response?.route?.polyline ?? "") : pathLine
-                return try BicycleRouteParser.parse(.init(polyline:fullLine,distance:path.distance,duration:path.duration,segments:segments),request:request)
+                return .init(polyline:fullLine,distance:path.distance,duration:path.duration,segments:segments)
             }
-            finish(.success(routes))
+            finish(.success(try BicycleRouteParser.routes(options,request:request)))
         } catch { finish(.failure(error)) }
     }
     @objc(AMapSearchRequest:didFailWithError:)

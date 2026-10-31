@@ -18,6 +18,11 @@ let partialBike=try BicycleRouteParser.parse(.init(polyline:fullBike,distance:90
     .init(polyline:"",instruction:"到达",road:"乙路",action:"",distance:500,duration:140)
 ]),request:bikeRequest)
 precondition(partialBike.points.last?.lat==30.004 && !partialBike.detailedGuidance,"Incomplete step geometry must not truncate the route")
+let alternatives=try BicycleRouteParser.routes([
+    .init(polyline:"",distance:0,duration:0,segments:[]),
+    .init(polyline:fullBike,distance:900,duration:240,segments:[])
+],request:bikeRequest)
+precondition(alternatives.count==1 && alternatives[0].points.count==3,"An incomplete alternative cannot discard a valid bicycle route")
 for invalid in ["", "104,30", "104,30;104,30", "104,30;NaN,30.004", "104,30;200,30", "104,30;120,40"] {
     expectFailure{_ = try BicycleRouteParser.parse(.init(polyline:invalid,distance:900,duration:240,segments:[]),request:bikeRequest)}
 }
