@@ -1,0 +1,24 @@
+name: iOS highway map regression
+on:
+  push:
+    branches: [codex/ios-016-ui-align-20261031]
+    paths: ['.github/workflows/ios-map-regression.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  maps:
+    runs-on: macos-26
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test highway map processing and delivery
+        run: |
+          set -o pipefail
+          swiftc -O ios/MotoNav/MapGeo.swift ios/MotoNav/RasterProcessing.swift ios/MotoNav/MapStyles.swift ios/MotoNav/RouteMapPlan.swift ios/tests/map-delivery/main.swift -o /tmp/map-delivery
+          /tmp/map-delivery | tee map-regression.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MotoNav-iOS-map-regression
+          path: map-regression.log
