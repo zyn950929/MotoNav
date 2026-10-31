@@ -8,7 +8,7 @@ enum TextImage {
     struct Img { let w: Int; let h: Int; let data: Data }
 
     /// maxW：最大宽度（像素）；文字太长先缩小字号，还放不下就截断加省略号
-    static func render(_ text: String, maxW: Int, size: CGFloat, minSize: CGFloat = 16) -> Img? {
+    static func render(_ text: String, maxW: Int, size: CGFloat, minSize: CGFloat = 16, byteLimit: Int? = nil) -> Img? {
         var t = text.trimmingCharacters(in: .whitespaces)
         if t.isEmpty { return nil }
         var fontSize = size
@@ -16,14 +16,21 @@ enum TextImage {
             [.font: UIFont.boldSystemFont(ofSize: s), .foregroundColor: UIColor.white]
         }
         func width(_ s: String, _ fs: CGFloat) -> CGFloat { (s as NSString).size(withAttributes: attrs(fs)).width }
-        while width(t, fontSize) > CGFloat(maxW) && fontSize > minSize { fontSize -= 1 }
-        if width(t, fontSize) > CGFloat(maxW) {
-            while t.count > 1 && width(t + "…", fontSize) > CGFloat(maxW) { t.removeLast() }
+        func height(_ fs:CGFloat)->Int {min(60,max(1,Int(ceil(UIFont.boldSystemFont(ofSize:fs).lineHeight))))}
+        func limit(_ fs:CGFloat)->Int {
+            byteLimit.map{TextBitmapBudget.width(maximum:maxW,height:height(fs),bytes:$0)} ?? maxW
+        }
+        while width(t, fontSize) > CGFloat(limit(fontSize)) && fontSize > minSize { fontSize -= 1 }
+        let allowed=limit(fontSize)
+        guard allowed>0 else {return nil}
+        if width(t, fontSize) > CGFloat(allowed) {
+            while t.count > 1 && width(t + "…", fontSize) > CGFloat(allowed) { t.removeLast() }
             t += "…"
         }
+        guard width(t,fontSize)<=CGFloat(allowed) else {return nil}
         let font = UIFont.boldSystemFont(ofSize: fontSize)
         let h = min(60, max(1, Int(ceil(font.lineHeight))))
-        let w = min(maxW, max(1, Int(ceil(width(t, fontSize)))))
+        let w = min(allowed, max(1, Int(ceil(width(t, fontSize)))))
 
         // 灰度画布：黑底白字，灰度值就是“浓淡”
         guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,

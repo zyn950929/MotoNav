@@ -59,6 +59,7 @@ struct MotoNavApp: App {
                 .preferredColorScheme(AppearanceMode(rawValue:appearance)?.scheme)
                 .onReceive(NotificationCenter.default.publisher(for:UIApplication.didBecomeActiveNotification)){_ in
                     BleLink.shared.syncPhoneClock(force:true)
+                    MusicBridge.shared.pollMetadata(force:true)
                 }
         }
     }

@@ -9,6 +9,7 @@ struct AMSMetadata {
     private(set) var values = Array(repeating: Value(), count: 7)
     private var assemblies: [Int: Assembly] = [:]
     var ready: Bool { values[6].text == "READY" }
+    var needsReplay: Bool { !ready || title.isEmpty || !assemblies.isEmpty }
     var title: String { values[0].text }
     var artist: String { values[1].text }
     var album: String { values[2].text }
@@ -57,5 +58,29 @@ struct AMSMetadata {
         guard let text = String(data: complete, encoding: .utf8) else { return changed }
         values[field] = Value(text: text, partial: partial, revision: revision)
         return true
+    }
+}
+
+/// Text-image protocol: 10-byte header, at most 32 parts and 8192 payload bytes.
+enum TextBitmapBudget {
+    static func bytes(maxWrite: Int) -> Int {min(8192,max(0,min(500,maxWrite)-10)*32)}
+    static func width(maximum: Int, height: Int, bytes: Int) -> Int {
+        guard maximum>0,height>0,bytes>0 else {return 0}
+        return min(maximum,(bytes/height)*2)
+    }
+}
+
+/// A finite retry burst repairs dropped AMS fragments without polling indefinitely.
+struct MediaMetadataReplay {
+    private var attempts=0
+    private var last:Double?
+    mutating func reset() {attempts=0;last=nil}
+    mutating func request(now:Double,needed:Bool,force:Bool=false)->Bool {
+        guard now.isFinite else {return false}
+        if force {reset()}
+        guard needed || force else {reset();return false}
+        let due=last.map{now >= $0 && now-$0>=3} ?? true
+        guard attempts<3,due else {return false}
+        attempts+=1;last=now;return true
     }
 }

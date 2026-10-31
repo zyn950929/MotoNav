@@ -1,4 +1,4 @@
-name: iOS 0.16 map and bicycle fix build3
+name: iOS 0.16 route map clock and music fixes build3
 on:
   push:
     branches: [codex/ios-016-map-cycle-fix-20261031]
@@ -53,6 +53,10 @@ jobs:
           python3 ios/tests/webmotor/check.py | tee parity-tests.log
           swiftc ios/MotoNav/ArrivalPolicy.swift ios/tests/arrival/main.swift -o /tmp/arrival
           /tmp/arrival
+          clang++ -std=c++17 ios/tests/phone-clock/receiver.cpp -o /tmp/clock-receiver
+          /tmp/clock-receiver
+          swiftc ios/MotoNav/AMSMetadata.swift ios/tests/music/main.swift -o /tmp/music
+          /tmp/music
           swiftc ios/MotoNav/ArrivalPolicy.swift ios/MotoNav/NaviSessionCallbacks.swift ios/tests/arrival-relay/SDKStubs.swift ios/tests/arrival-relay/main.swift -o /tmp/relay
           /tmp/relay
           swiftc -O ios/MotoNav/MapGeo.swift ios/MotoNav/RasterProcessing.swift ios/MotoNav/MapStyles.swift ios/tests/four-styles/main.swift -o /tmp/styles

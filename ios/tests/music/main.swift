@@ -42,3 +42,20 @@ check(!model.receive(packet(0, 2, Data([66]), count: 2)), "new revision retires 
 check(!model.receive(packet(0, 1, Data([67]), part: 1, count: 2)), "old fragment ignored")
 check(model.receive(packet(0, 2, Data([68]), part: 1, count: 2)) && model.title == "BD", "latest fragments complete")
 print("AMS metadata: \(checks) checks passed")
+var replay=MediaMetadataReplay()
+check(replay.request(now:0,needed:true),"missing metadata triggers replay")
+check(!replay.request(now:1,needed:true),"rate bound")
+check(replay.request(now:3,needed:true) && replay.request(now:6,needed:true),"retry lost fields")
+check(!replay.request(now:30,needed:true),"finite retry burst")
+check(!replay.request(now:31,needed:false),"complete metadata resets burst")
+check(replay.request(now:32,needed:true),"new missing field gets a fresh burst")
+for mtu in [20,100,182,244,500] {
+    let budget=TextBitmapBudget.bytes(maxWrite:mtu)
+    for height in [22,29,39,60] {
+        let width=TextBitmapBudget.width(maximum:360,height:height,bytes:budget)
+        check(((width+1)/2)*height<=budget,"title bitmap cannot exceed packet or firmware limit")
+        check(budget<=8192 && budget<=max(0,mtu-10)*32,"transport bound")
+    }
+}
+check(360*39/2>TextBitmapBudget.bytes(maxWrite:182),"long title reproduces the previous silent 32-part drop")
+print("PASS bounded AMS replay and song-name bitmap capacity for 20/100/182/244/500-byte writes")

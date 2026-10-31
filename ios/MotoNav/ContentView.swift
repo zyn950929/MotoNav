@@ -29,6 +29,7 @@ struct ContentView: View {
     @State private var showRides = false
     @State private var showScreens=false
     @State private var confirmForgetPhones=false
+    @State private var clockRequested=false
     @AppStorage("voice_rate") private var voiceRate = Double(AVSpeechUtteranceDefaultSpeechRate)
     @AppStorage("voice_pitch") private var voicePitch = 1.0
     @AppStorage("voice_id") private var voiceID = ""
@@ -442,6 +443,9 @@ struct ContentView: View {
                 GlassChip(title:"忘掉其他手机",foreground:AppTheme.red,enabled:ble.isReady && ble.verified,compact:true){confirmForgetPhones=true}
             }
             Text("更换圆屏时按设备名称选择，并按圆屏提示完成配对。").font(.caption).foregroundColor(Self.sub)
+            Button("校准圆屏时间") {ble.syncPhoneClock(force:true);clockRequested=true}
+                .disabled(!ble.isReady || !ble.verified)
+            if clockRequested {Text("已发送手机时间，圆屏收到后会更新。") .font(.caption).foregroundColor(Self.sub)}
         }
     }
     private var layoutCard:some View {

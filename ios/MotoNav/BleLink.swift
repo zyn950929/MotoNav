@@ -89,6 +89,7 @@ final class BleLink: NSObject, ObservableObject {
             self?.checkConnectionSetup()
             self?.requestBuildingCapability()
             MusicBridge.shared.syncLyrics()
+            MusicBridge.shared.pollMetadata()
             guard let self = self, self.isReady, self.queue.isEmpty, !self.bulkQ.hasData,
                   Date().timeIntervalSince(self.lastWriteAt) > 1.5 else { return }
             self.send("P")
@@ -560,9 +561,10 @@ extension BleLink: CBCentralManagerDelegate, CBPeripheralDelegate {
         if d.first == 0xa6 { MusicBridge.shared.receiveAMS(d); return }
         guard let raw = String(data: d, encoding: .utf8) else { return }
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        if s == "U,1", !verified {
-            verified = true; syncPhoneClock(force:true); buildingProbe.reset(); requestBuildingCapability(); Settings.shared.pushAll(); MapFeeder.shared.resendAll(); return
+        if BleAuthenticatedReply.accepts(s), !verified {
+            verified = true; syncPhoneClock(force:true); buildingProbe.reset(); requestBuildingCapability(); Settings.shared.pushAll(); MapFeeder.shared.resendAll()
         }
+        if s == "U,1" {return}
         if s == "CAP,HID,1" {
             mediaHIDSupported = true
             sendOnce("#AMS?")

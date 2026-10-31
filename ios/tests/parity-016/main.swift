@@ -1,17 +1,29 @@
 var clock=PhoneClockSync()
 let epoch=1793433600.0
-precondition(clock.message(wall:epoch,uptime:10,offset:28800)=="#TIME,1793433600,28800")
-precondition(clock.message(wall:epoch+59,uptime:69,offset:28800)==nil)
-precondition(clock.message(wall:epoch+60,uptime:70,offset:28800)=="#TIME,1793433660,28800")
-precondition(clock.message(wall:epoch+61,uptime:71,offset:32400) != nil)
-precondition(clock.message(wall:epoch+600,uptime:72,offset:32400) != nil)
-precondition(clock.message(wall:epoch+601,uptime:73,offset:32400,force:true) != nil)
+let firstClock=clock.message(wall:epoch,uptime:10,offset:28800)!
+precondition(firstClock=="#TIME,1793433600,28800")
+precondition(clock.message(wall:epoch+1,uptime:11,offset:28800)==nil)
+let secondClock=clock.message(wall:epoch+2,uptime:12,offset:28800)!
+precondition(secondClock=="#TIME,1793433602,28800")
+precondition(clock.message(wall:epoch+3,uptime:13,offset:28800)==nil)
+let thirdClock=clock.message(wall:epoch+4,uptime:14,offset:28800)!
+precondition(thirdClock=="#TIME,1793433604,28800")
+precondition(clock.message(wall:epoch+63,uptime:73,offset:28800)==nil)
+precondition(clock.message(wall:epoch+64,uptime:74,offset:28800)=="#TIME,1793433664,28800")
+precondition(clock.message(wall:epoch+65,uptime:75,offset:32400) != nil)
+precondition(clock.message(wall:epoch+600,uptime:76,offset:32400) != nil)
+precondition(clock.message(wall:epoch+601,uptime:77,offset:32400,force:true) != nil)
+try ([firstClock,secondClock,thirdClock].joined(separator:"\n")+"\n").write(toFile:"/tmp/motonav-clock-wires.txt",atomically:true,encoding:.utf8)
 precondition(clock.message(wall:Double.nan,uptime:100,offset:0)==nil)
+precondition(clock.message(wall:946684800,uptime:100,offset:0)==nil)
+precondition(clock.message(wall:epoch,uptime:100,offset:86400)==nil)
+precondition(BleAuthenticatedReply.accepts("U,1") && BleAuthenticatedReply.accepts("CAP,HID,1"))
+precondition(!BleAuthenticatedReply.accepts("U,0") && !BleAuthenticatedReply.accepts("CAP,HID,0"))
 var reconnected=PhoneClockSync()
 precondition(reconnected.message(wall:epoch+700,uptime:170,offset:28800) == "#TIME,1793434300,28800")
 precondition(NavigationSpeed.values == [60,100,120])
 precondition(NavigationSpeed.next(60)==100 && NavigationSpeed.next(100)==120 && NavigationSpeed.next(120)==60)
-print("PASS clock throttling, UTC wire, timezone change, manual clock change, reconnect and simulation speeds")
+print("PASS initial clock retries, UTC wire, firmware ranges, lost-U capability evidence, periodic sync, timezone, reconnect and speeds")
 
 let suite="MotoNavTests-"+UUID().uuidString
 let defaults=UserDefaults(suiteName:suite)!

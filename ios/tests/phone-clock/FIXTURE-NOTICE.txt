@@ -1,0 +1,3 @@
+Unmodified HomeClock.h from zyn950929/MotoNav firmware 7.12.10-pages.4, source commit 26f3cfb501824213635870c67544bd745a256af0.
+SHA256: 41d2f98c8ca84cb3331ca6ffa889a22655bb93fee8e7ec066a252ff8e3a3f036
+Used to validate actual Swift clock wire messages against the published receiver.
