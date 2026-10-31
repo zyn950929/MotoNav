@@ -137,3 +137,17 @@ base[2]=true
 available[1]=false
 check(RouteMapPreparationPolicy.next(base:base,complete:complete,display:0,target:1,buildings:true,kmh:120,available:available)?.index != 1,"roof cooldown is local rather than stopping all downloads")
 print("PASS delayed 60/80/100/120 km/h handoffs; old blank reproduced; staged-map ATT protection; near-route building priority")
+
+
+// A slow transfer can leave a late staged packet behind the vehicle. In build6
+// it survived the broad 1150m preparation check and blocked every fresh capture.
+var late=MapHandoffBuffer()
+late.stage(.init(bytes:Data([9]),cx:0,cy:600,sat:false,type:3,info:"",source:3,style:1))
+check(late.take(x:0,y:1200,kmh:120,style:1,transferPending:false)==nil && late.pending != nil,"reproduce late pending map beyond its usable viewport")
+check(late.discardObsolete(x:0,y:1200,kmh:120,allowed:[(0,1200),(0,1800)]),"late unusable map must release the capture slot now, without waiting for 1150m")
+check(late.pending==nil,"new current-area capture is unblocked")
+late.stage(.init(bytes:Data([8]),cx:0,cy:600,sat:false,type:3,info:"",source:3,style:1))
+check(!late.discardObsolete(x:0,y:0,kmh:120,allowed:[(0,0),(0,600)]),"early usable future route block survives pruning")
+late.stage(.init(bytes:Data([8]),cx:0,cy:-600,sat:false,type:3,info:"",source:3,style:1))
+check(!late.discardObsolete(x:0,y:0,kmh:120,allowed:[(0,0),(0,-600)]),"route through a hairpin must not be mistaken for a stale behind-heading block")
+print("PASS late staged-map blockage reproduced and cleared; early and hairpin route packets retained")

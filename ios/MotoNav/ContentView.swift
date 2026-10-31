@@ -802,7 +802,7 @@ struct ContentView: View {
                 .pickerStyle(.segmented)
                 Toggle("清爽模式", isOn: $settings.clean).foregroundColor(AppTheme.text).tint(ContentView.pink)
                 Text("仅保留地图和路线，隐藏其他提示").font(.caption2).foregroundColor(ContentView.sub)
-                Button("地图显示问题：生成对照图"){showMapReport=true}
+                Button("地图显示问题"){showMapReport=true}
             }
             Text("夜间配色").foregroundColor(AppTheme.text)
             Picker("夜间配色", selection: $settings.nightMode) {

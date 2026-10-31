@@ -76,6 +76,8 @@ final class BleLink: NSObject, ObservableObject {
     private var lastWriteAt = Date.distantPast
     private var writePacer = BleWritePacer()
     private var pumpScheduled = false
+    private var lastBulkProgressAt=0.0
+    private var attWriteStartedAt=0.0
 
     /// 圆屏发来的通知（主线程回调）
     var onNotify: ((String) -> Void)?
@@ -329,6 +331,7 @@ final class BleLink: NSObject, ObservableObject {
         let parts = (data.count + payload - 1) / payload
         if parts == 0 || parts > 4000 { return }
         let total = data.count
+        MapPipelineTrace.event("bulk-queued",["type":type,"id":id,"bytes":total,"parts":parts,"maxWrite":maxWrite,"payload":payload])
         var packets: [Data] = []
         for p in 0..<parts {
             let off = p * payload
@@ -414,6 +417,7 @@ final class BleLink: NSObject, ObservableObject {
                 traceBulk(part, event: "bulk-write", response: response)
                 if response {
                     bulkWriteSerial += 1; let serial = bulkWriteSerial
+                    attWriteStartedAt=ProcessInfo.processInfo.systemUptime
                     p.writeValue(part.data, for: rx, type: .withResponse)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                         guard let self = self, self.isReady, self.bulkWriteSerial == serial, self.bulkQ.inFlight != nil else { return }
@@ -439,7 +443,9 @@ final class BleLink: NSObject, ObservableObject {
         guard part.data.count >= BULK_HEADER else { return }
         let seq = Int(part.data[5]) | Int(part.data[6]) << 8
         let count = Int(part.data[3]) | Int(part.data[4]) << 8
-        if seq == 0 || seq == count - 1 || part.attempts > 1 {
+        let now=ProcessInfo.processInfo.systemUptime
+        if seq == 0 || seq == count - 1 || part.attempts > 1 || now-lastBulkProgressAt>=1 {
+            lastBulkProgressAt=now
             MapPipelineTrace.event(event, ["type": part.type, "id": part.id, "seq": seq, "parts": count,
                 "attempt": part.attempts, "response": response, "commandsQueued": queue.count, "bulkQueued": bulkQ.queuedCount])
         }
@@ -566,6 +572,10 @@ extension BleLink: CBCentralManagerDelegate, CBPeripheralDelegate {
 
     func peripheral(_ p: CBPeripheral, didWriteValueFor ch: CBCharacteristic, error: Error?) {
         guard p === peripheral, ch === rxChar, let part = bulkQ.inFlight else { return }
+        let now=ProcessInfo.processInfo.systemUptime
+        if part.type != 0,now-lastBulkProgressAt>=1 {
+            MapPipelineTrace.event("att-response",["type":part.type,"id":part.id,"elapsed":max(0,now-attWriteStartedAt),"bulkQueued":bulkQ.queuedCount])
+        }
         traceBulk(part, event: error == nil ? "bulk-write-response" : "bulk-write-error")
         bulkBarrier.reset()
         _ = bulkQ.complete(success: error == nil)

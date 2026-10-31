@@ -72,13 +72,25 @@ final class MapSampleReport: ObservableObject {
 
 struct MapSampleReportView:View {
     @ObservedObject private var report=MapSampleReport.shared
+    @ObservedObject private var trace=MapTraceReport.shared
     @Environment(\.dismiss) private var dismiss
     @State private var sharing=false
+    @State private var shareItems:[URL]=[]
     var body:some View {
         NavigationView {
             ScrollView {
                 VStack(alignment:.leading,spacing:16) {
                     Text("地图显示问题").font(.title2.bold())
+                    Text("高速底图衔接").font(.headline)
+                    Text("模拟导航前点开始，底图空白后停止并导出。不记录地图画面、坐标或 Key，不会自动上传。")
+                        .font(.subheadline).foregroundColor(AppTheme.sub)
+                    if trace.recording {
+                        Button("停止记录"){trace.finish()}
+                    } else {Button("开始记录地图衔接"){trace.begin()}.disabled(trace.exporting)}
+                    Text(trace.status).font(.footnote).foregroundColor(AppTheme.sub)
+                    if !trace.files.isEmpty {Button("导出衔接记录"){shareItems=trace.files;sharing=true}}
+                    Divider()
+                    Text("地图颜色与纹理").font(.headline)
                     Text("请在网纹出现的地图区域生成对照图。它们包含地图画面，不含 Key；不会自动上传。")
                         .font(.subheadline).foregroundColor(AppTheme.sub)
                     Button(report.waiting ? "正在取图…":"生成新的对照图"){report.begin()}.disabled(report.waiting)
@@ -89,12 +101,12 @@ struct MapSampleReportView:View {
                             Image(uiImage:image).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius:12))
                         }
                     }
-                    if !report.files.isEmpty {Button("导出对照图和资料"){sharing=true}}
+                    if !report.files.isEmpty {Button("导出对照图和资料"){shareItems=report.files;sharing=true}}
                 }.padding(16)
             }.background(AppTheme.bg).foregroundColor(AppTheme.text)
                 .navigationTitle("地图显示问题").navigationBarTitleDisplayMode(.inline)
                 .toolbar{ToolbarItem(placement:.confirmationAction){Button("完成"){dismiss()}}}
-        }.sheet(isPresented:$sharing){MapSampleShare(items:report.files)}
+        }.sheet(isPresented:$sharing){MapSampleShare(items:shareItems)}
     }
 }
 private struct MapSampleShare:UIViewControllerRepresentable {

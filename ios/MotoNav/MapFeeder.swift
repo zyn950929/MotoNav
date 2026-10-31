@@ -179,6 +179,10 @@ final class MapFeeder: ObservableObject {
             lastCoverageTrace = Date()
             MapPipelineTrace.event("view-coverage", ["kmh": kmh, "ready": BleLink.shared.isReady,
                 "sentCovered": haveChunk && MapCoveragePolicy.covers(x: x, y: y, cx: chunkCx, cy: chunkCy, kmh: max(120, kmh)),
+                "bytes":chunkBytes?.count ?? 0,"awaitAck":!chunkAcked,
+                "transferPending":BleLink.shared.bulkPending(type:chunkType,id:chunkId),
+                "preparedOffsetM":handoff.pending.map{max(abs(x-$0.cx),abs(y-$0.cy))} ?? -1,
+                "viewportOffsetM":confirmedCenter.map{max(abs(x-$0.x),abs(y-$0.y))} ?? -1,
                 "confirmedCovered": confirmedCenter.map { MapCoveragePolicy.covers(x: x, y: y, cx: $0.x, cy: $0.y, kmh: max(120, kmh)) } ?? false])
         }
         var hdg = bearing
@@ -201,6 +205,15 @@ final class MapFeeder: ObservableObject {
                 futureNode=maps.plan.nodes[preparationIndex]
             }
         }
+        if let current=node {
+            var relevant=[(x:current.x,y:current.y)]
+            if let future=futureNode {relevant.append((x:future.x,y:future.y))}
+            if handoff.discardObsolete(x:x,y:y,kmh:kmh,allowed:relevant) {
+                MapPipelineTrace.event("staged-map-expired",["kmh":kmh])
+            }
+        }
+        let confirmedCovered=confirmedCenter.map{MapCoveragePolicy.covers(x:x,y:y,cx:$0.x,cy:$0.y,kmh:max(120,kmh),margin:50)} ?? false
+        let recovering=haveChunk && !confirmedCovered
         let distance = hypot(x - chunkCx, y - chunkCy)
         let refresh = chunkSat ? SAT_REFRESH : REFRESH
         let changedNode = node.map { abs($0.x - chunkCx) >= 1 || abs($0.y - chunkCy) >= 1 } ?? false
@@ -216,7 +229,7 @@ final class MapFeeder: ObservableObject {
         let retryBuildings = offlineMaps == nil && buildingMode && MapCoveragePolicy.mayCaptureBuildings(kmh:kmh) && !chunkBuildingsComplete && UIApplication.shared.applicationState == .active && Date().timeIntervalSince(lastBuildingTry) >= 60
         // Preparation and display targets differ: a future block may be captured now,
         // then held until it covers the viewport and the previous ATT transfer finishes.
-        let wanted = haveChunk && prepareEarly ? (futureNode ?? node) : node
+        let wanted = haveChunk && prepareEarly && !recovering ? (futureNode ?? node) : node
         let a = bearing * .pi / 180, ahead = kmh > 5 ? (satMode ? SAT_AHEAD : MapCoveragePolicy.lookahead(kmh: kmh, preferred: AHEAD)) : 0
         let targetX=wanted?.x ?? (x+sin(a)*ahead), targetY=wanted?.y ?? (y+cos(a)*ahead)
         let alreadyPrepared=handoff.contains(cx:targetX,cy:targetY,style:Settings.shared.theme)
@@ -449,39 +462,69 @@ final class MapFeeder: ObservableObject {
     }
 }
 
-/// Bounded DEBUG telemetry for normal navigation; never saves keys or screenshot images.
+/// Explicitly enabled, bounded timing diagnostics; no images, payloads or coordinates.
 enum MapPipelineTrace {
-    #if DEBUG || MAP_DIAGNOSTICS
-    private static let queue = DispatchQueue(label: "motonav.map.trace")
-    private static var entries: [[String: Any]] = []
-    private static var root: URL {
-        FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("map-pipeline")
+    private static let gate=NSLock()
+    private static let queue=DispatchQueue(label:"motonav.map.trace")
+    private static var enabled=false
+    private static var buffer=MapTraceBuffer()
+    private static var startUptime=0.0
+    static func begin() {
+        gate.lock();defer{gate.unlock()}
+        queue.async {buffer=MapTraceBuffer();startUptime=ProcessInfo.processInfo.systemUptime}
+        enabled=true
     }
-    #endif
-    static func event(_ name: String, _ fields: [String: Any] = [:]) {
-        #if DEBUG || MAP_DIAGNOSTICS
-        queue.async { record(name, fields) }
-        #endif
+    static func event(_ name:String,_ fields:[String:Any]=[:]) {
+        gate.lock();defer{gate.unlock()}
+        guard enabled else {return}
+        let uptime=ProcessInfo.processInfo.systemUptime
+        queue.async {buffer.append(name:name,fields:fields,seconds:uptime-startUptime)}
     }
-    static func packet(_ bytes: Data, type: Int, id: Int, ready: Bool) {
-        #if DEBUG || MAP_DIAGNOSTICS
+    static func packet(_ bytes:Data,type:Int,id:Int,ready:Bool) {
+        gate.lock();let recording=enabled;gate.unlock()
+        guard recording else {return}
+        event("map-send",["type":type,"id":id,"bytes":bytes.count,"ready":ready,
+            "decodeValid":RasterPacket.valid(bytes),"buildings":RasterPacket.isBuilding(bytes)])
+    }
+    static func finish(completion:@escaping(URL?)->Void) {
+        gate.lock();defer{gate.unlock()};enabled=false
         queue.async {
-            try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-            try? bytes.write(to: root.appendingPathComponent("wire.bin"), options: .atomic)
-            record("map-send", ["type": type, "id": id, "bytes": bytes.count, "buildings": RasterPacket.isBuilding(bytes), "ready": ready])
-        }
-        #endif
-    }
-    #if DEBUG || MAP_DIAGNOSTICS
-    private static func record(_ name: String, _ fields: [String: Any]) {
-        var entry = fields; entry["event"] = name; entry["time"] = Date().timeIntervalSince1970
-        entries.append(entry)
-        if entries.count > 256 { entries.removeFirst(entries.count - 256) }
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        if let bytes = try? JSONSerialization.data(withJSONObject: entries, options: [.sortedKeys]) {
-            try? bytes.write(to: root.appendingPathComponent("events.json"), options: .atomic)
+            let root=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask)[0].appendingPathComponent("map-pipeline",isDirectory:true)
+            let url=root.appendingPathComponent("map-timing-"+UUID().uuidString+".json")
+            var report=buffer.document
+            report["version"]=APP_VERSION;report["build"]=Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") ?? ""
+            report["note"]="User-started timing session. No keys, cookies, raw packets, images, route names or geographic coordinates."
+            do {
+                try FileManager.default.createDirectory(at:root,withIntermediateDirectories:true)
+                try JSONSerialization.data(withJSONObject:report,options:[.prettyPrinted,.sortedKeys]).write(to:url,options:.atomic)
+                DispatchQueue.main.async{completion(url)}
+            } catch {DispatchQueue.main.async{completion(nil)}}
         }
     }
-    #endif
 }
 
+final class MapTraceReport:ObservableObject {
+    static let shared=MapTraceReport()
+    @Published private(set) var recording=false
+    @Published private(set) var exporting=false
+    @Published private(set) var files:[URL]=[]
+    @Published private(set) var status="开始模拟前记录，出现底图空白后停止并导出。"
+    private var timer:Timer?
+    func begin() {
+        guard !recording && !exporting else {return}
+        files=[];recording=true;status="正在记录地图衔接，最长 10 分钟。"
+        MapPipelineTrace.begin()
+        MapPipelineTrace.event("session-start",["maxWrite":BleLink.shared.maxWrite,"ready":BleLink.shared.isReady])
+        timer=Timer.scheduledTimer(withTimeInterval:600,repeats:false){[weak self] _ in self?.finish()}
+    }
+    func finish() {
+        guard recording else {return}
+        timer?.invalidate();timer=nil;recording=false;exporting=true;status="正在整理记录…"
+        MapPipelineTrace.event("session-stop")
+        MapPipelineTrace.finish{url in
+            self.exporting=false
+            self.files=url.map{[$0]} ?? []
+            self.status=url == nil ? "记录保存失败，请重试。":"记录已保存，仅含地图准备、传输与确认的时间和状态。"
+        }
+    }
+}

@@ -139,3 +139,44 @@ check(writer.contains(type:3,id:88),"early K still retains the ATT callback slot
 _ = writer.complete(success:true)
 check(!writer.contains(type:3,id:88),"finished map releases staged successor")
 print("PASS ID-specific map transfer protection")
+
+
+// Replay realistic byte/MTU combinations through the real write queue/pacer/barrier.
+// This measures the model's wire time instead of assuming every map takes 1–3s.
+func wireTime(bytes:Int,maxWrite:Int,rtt:Double)->Double {
+    let count=(bytes+maxWrite-16)/(maxWrite-15)
+    var queue=BleBulkWriteQueue(),pacer=BleWritePacer(),barrier=BleBulkBarrier()
+    queue.replace(type:3,id:17,packets:(0..<count).map{Data([UInt8($0&255),UInt8(($0>>8)&255)])})
+    var now=0.0,ackAt:Double?,nextPosition=0.0,positionQueued=false,delivered=0
+    while queue.hasData {
+        if now>=nextPosition {positionQueued=true;nextPosition+=0.1}
+        if let at=ackAt,now>=at {_ = queue.complete(success:true);barrier.reset();ackAt=nil;delivered+=1}
+        let choice=BleOutboundPriority.choose(commandReady:positionQueued,bulkReady:queue.canStart,bulkPending:queue.hasData,imageReady:false)
+        if choice != .idle,pacer.take(now:now) {
+            if choice == .command {positionQueued=false}
+            else if choice == .bulk,let part=queue.next() {
+                let seq=Int(part.data[0])|Int(part.data[1])<<8
+                if barrier.needsResponse(seq:seq,parts:count,retry:false,commandReady:true) {ackAt=now+rtt}
+                else {_ = queue.complete(success:true);delivered+=1}
+            }
+        }
+        now+=0.001;precondition(now<300,"wire simulation stalled")
+    }
+    check(delivered==count,"real-size map delivers all fragments in model")
+    return now
+}
+let smallMapTime=wireTime(bytes:16000,maxWrite:182,rtt:0.1)
+let detailedMapTime=wireTime(bytes:80000,maxWrite:182,rtt:0.1)
+let slowMapTime=wireTime(bytes:80000,maxWrite:182,rtt:0.18)
+check(detailedMapTime>3 && detailedMapTime>smallMapTime*3,"large raster invalidates the old three-second fixed wire assumption")
+check(slowMapTime>detailedMapTime*1.5,"ATT delay materially changes map delivery time")
+print("PASS actual-size modeled wire: 16KB=\(smallMapTime)s, 80KB=\(detailedMapTime)s, slower 80KB=\(slowMapTime)s")
+var trace=MapTraceBuffer()
+trace.append(name:"map-send",fields:["bytes":80000,"ready":true,"lat":30.1,"lng":104.2,"apiKey":"PRIVATE","cookie":"PRIVATE","job":"PRIVATE","elapsed":Double.nan],seconds:1)
+let traceJSON=try! JSONSerialization.data(withJSONObject:trace.document)
+let traceText=String(data:traceJSON,encoding:.utf8)!
+check(!traceText.contains("PRIVATE") && !traceText.contains("lat") && !traceText.contains("lng"),"trace allowlist excludes locations and secrets")
+check(traceText.contains("80000"),"trace preserves the transport measurement")
+for i in 0..<MapTraceBuffer.capacity+10 {trace.append(name:"bulk-write",fields:["seq":i],seconds:Double(i))}
+check(trace.events.count==MapTraceBuffer.capacity && trace.dropped==11,"timing diagnostics have bounded memory")
+print("PASS timing record numeric allowlist, coordinate/secret exclusion and bounded event storage")

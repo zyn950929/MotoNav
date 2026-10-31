@@ -161,6 +161,15 @@ struct MapHandoffBuffer {
     static func mayPrepare(x:Double,y:Double,cx:Double,cy:Double)->Bool {
         max(abs(x-cx),abs(y-cy)) < 1150
     }
+    /// A late packet behind the vehicle must not block the current route's next capture.
+    /// Retain early future packets on the actual route, including bends/hairpins.
+    mutating func discardObsolete(x:Double,y:Double,kmh:Int,allowed:[(x:Double,y:Double)])->Bool {
+        guard let p=pending,!allowed.isEmpty else {return false}
+        let usable=MapCoveragePolicy.covers(x:x,y:y,cx:p.cx,cy:p.cy,kmh:max(120,kmh),margin:50)
+        let planned=allowed.contains{abs($0.x-p.cx)<1 && abs($0.y-p.cy)<1}
+        if !usable && !planned {pending=nil;return true}
+        return false
+    }
     mutating func clear() { pending=nil }
     mutating func stage(_ packet:Packet) { pending=packet }
     func contains(cx:Double,cy:Double,style:Int)->Bool {
