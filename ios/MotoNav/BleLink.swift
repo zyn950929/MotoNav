@@ -78,6 +78,7 @@ final class BleLink: NSObject, ObservableObject {
     private var pumpScheduled = false
     private var lastBulkProgressAt=0.0
     private var attWriteStartedAt=0.0
+    private var lastATTTraceAt=0.0
 
     /// 圆屏发来的通知（主线程回调）
     var onNotify: ((String) -> Void)?
@@ -455,6 +456,7 @@ final class BleLink: NSObject, ObservableObject {
     private func onLinkReady() {
         guard !isReady, txNotifyReady else { return }
         isReady = true
+        MapPipelineTrace.event("link-ready",["maxWrite":maxWrite,"ready":true])
         handshake.begin(.ready,now:ProcessInfo.processInfo.systemUptime)
         connectionRetries=0
         writePacer.reset()
@@ -526,6 +528,7 @@ extension BleLink: CBCentralManagerDelegate, CBPeripheralDelegate {
     func centralManager(_ c: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) {
         guard p === peripheral else { return }
         screenBattery=nil;screenCharging=false
+        MapPipelineTrace.event("link-disconnected",["ready":false])
         isReady = false
         bulkQ.reset(); bulkBarrier.reset(); bulkWriteSerial += 1
         buildingsSupported = false
@@ -573,7 +576,8 @@ extension BleLink: CBCentralManagerDelegate, CBPeripheralDelegate {
     func peripheral(_ p: CBPeripheral, didWriteValueFor ch: CBCharacteristic, error: Error?) {
         guard p === peripheral, ch === rxChar, let part = bulkQ.inFlight else { return }
         let now=ProcessInfo.processInfo.systemUptime
-        if part.type != 0,now-lastBulkProgressAt>=1 {
+        if part.type != 0,now-lastATTTraceAt>=1 {
+            lastATTTraceAt=now
             MapPipelineTrace.event("att-response",["type":part.type,"id":part.id,"elapsed":max(0,now-attWriteStartedAt),"bulkQueued":bulkQ.queuedCount])
         }
         traceBulk(part, event: error == nil ? "bulk-write-response" : "bulk-write-error")
