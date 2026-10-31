@@ -665,6 +665,17 @@ object MapFeeder {
         }
     }
 
+    /** Standard maps are full RLE packets; a negative acknowledgement retries that full packet. */
+    fun onNack(type: Int, id: Int) {
+        handler.post {
+            if (!routeOnly() && haveChunk && type == chunkType && id == chunkId) {
+                haveConfirmedChunk = false
+                chunkAcked = false
+                sendChunk()
+            }
+        }
+    }
+
     /** 蓝牙重新连上：圆屏可能重启过，全部重发 */
     fun onLinkReady() {
         BleLink.sendEvent("#GB?")
@@ -714,4 +725,3 @@ object MapFeeder {
             "普通图构建 ${(baseBuildSeconds * 10).roundToInt() / 10.0} 秒，确认 ${(baseDeliverySeconds * 10).roundToInt() / 10.0} 秒，准备预留 ${basePreparationSeconds().roundToInt()} 秒"
     }
 }
-

@@ -33,8 +33,9 @@ void handleBulk(const uint8_t *d, int n) {
       parseGhost(b.buf, total);                        // v4.4 原路线
     } else {
       if (!parseRaster(b.buf,total)) {
-        // 没有成功解码就不回“已确认”，并允许相同编号完整重发。
+        // 没有成功解码就不回“已确认”，通知手机回退全量重发。
         b.done=false; b.got=0; memset(b.mask,0,sizeof(b.mask));
+        pendingAck = "N," + String(type) + "," + String(id);
         return;
       }
     }

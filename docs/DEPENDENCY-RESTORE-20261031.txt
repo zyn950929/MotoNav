@@ -1,0 +1,35 @@
+Android missing dependency restoration (2026-10-31)
+
+Original author: nongxl, repository nongxl/MotoNav_stopwatch.
+Pinned source: https://github.com/nongxl/MotoNav_stopwatch/tree/582fba00e4276cc8a2608ba95d88ca56bd78c25e
+The source branch is feat/board-m5stopwatch. Its LICENSE.md matches this
+repository's LICENSE.md at the reviewed revisions; retain the project license.
+
+Restored from android/countdown/app/src/main/java/com/yuminaga/motonav/:
+- CoverFeeder.kt and CoverPacket.java (album artwork encoding/transmission).
+- CrossFeeder.kt and CrossPacket.java (junction bitmap encoding/transmission).
+Original CoverPacketTest.java and CrossPacketTest.java were also restored.
+Equivalent files were added to android/standard with its existing package name.
+
+Local adaptations:
+- MediaBitmapCapabilities.java requires explicit authenticated CAP,COVER,1 or
+  CAP,CROSS,1 messages before optional image processing/transmission is enabled.
+- The reviewed 1.75/1.85B receivers only implement Bulk types 1 through 4.
+  Cover/type 6 and Cross/type 5 remain disabled on those receivers. This change
+  restores complete source dependencies; it does not add firmware decoders or
+  promise artwork/junction bitmap display on existing boards.
+- Asynchronous encoders reject superseded work after a hide/clear/new image.
+  Capability notifications are scoped to the current authenticated connection.
+- The standard edition retains complete RLE maps. Its pre-existing missing
+  onZmapCapability callback was removed, and its missing onNack callback now
+  resends the current complete map when the packet type/id match.
+
+Validation:
+- Both editions' Java policy/codec/capability checks passed.
+- Both editions' assembleDebug builds passed (Gradle 8.10.2, JDK 17, offline).
+- PR #12 firmware raster and production building-carry checks passed earlier.
+- No phone/board installation or hardware image-channel test was performed.
+- Publication status is recorded in Git history; hardware validation remains pending.
+
+These dependencies were absent from the reviewed main branch before PR #12.
+They are recorded here separately from PR #12's map compression/delta changes.

@@ -13,6 +13,7 @@ using std::min;using std::max;
 #define PI 3.14159265358979323846
 #define RASTER_BUF_BYTES 720000
 #define RASTER_MAX_PX 1440000
+#define RASTER_MAX_BYTES (500 * 1024)
 #include "fixture/RasterContinuity.h"
 struct tinfl_decompressor{};using tinfl_status=int;
 constexpr int TINFL_FLAG_PARSE_ZLIB_HEADER=1,TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF=2,TINFL_STATUS_DONE=0;
@@ -50,6 +51,12 @@ int main(){
  setRasterBuildingCarry(true);assert(rasterBuildingCarryEpoch==mediaConnectionEpoch);
  deliver(packet(detail,n,0,0,true));
  for(int i=0;i<6;i++){deliver(packet(base,n));assert(roofCount()==22*22);}
+ // The rendered base contains retained roofs, unlike the sender's ground-only reference.
+ // Reject XOR against it so the existing NACK path requests a complete frame.
+ auto delta=packet(base,n);delta[15]|=0x10;
+ delta.insert(delta.begin()+16,8,0); // reference x0/y0 are both zero here
+ assert(!rasterDeltaBaseClean);
+ assert(!parseRaster(delta.data(),delta.size()) && roofCount()==22*22);
  // New ground/park semantics are kept; new roads and water supersede old roofs.
  std::vector<uint8_t> changed=base;changed[10*n+10]=1;changed[10*n+11]=3;changed[10*n+12]=2;
  deliver(packet(changed,n));assert(at(10,10)==1 && at(11,10)==3 && at(12,10)==6);

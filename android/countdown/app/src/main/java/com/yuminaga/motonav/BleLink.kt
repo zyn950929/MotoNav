@@ -97,6 +97,7 @@ object BleLink {
         gatt = null
         old?.let { session.clear(it) }
         ready = false; verified = false; buildingsSupported = false; zmapSupported = false
+        mediaBitmaps.reset()
         capabilityQuerySent = false; rxChar = null; mtu = 23
         phyText = "?"; burstStart = 0L
         synchronized(lock) { inFlight = 0; ctrlQueue.clear(); imgQueue.clear(); bulkQ.clear() }
@@ -389,9 +390,21 @@ object BleLink {
         }
     }
 
+    private val mediaBitmaps = MediaBitmapCapabilities()
+    val coverSupported: Boolean get() = verified && mediaBitmaps.supportsCover()
+    val crossSupported: Boolean get() = verified && mediaBitmaps.supportsCross()
+
     private fun onNotify(bytes: ByteArray?) {
         val msg = bytes?.toString(Charsets.UTF_8)?.trim() ?: return
         if (BleSession.confirms(msg, capabilityQuerySent)) markVerified()
+        if (MediaBitmapCapabilities.isMessage(msg)) {
+            val connection = gatt
+            handler.post {
+                if (connection != null && gatt === connection && session.owns(connection) &&
+                    mediaBitmaps.accept(msg, verified) && msg == "CAP,COVER,1") MusicBridge.refresh(true)
+            }
+            return
+        }
         if(msg=="CAP,HID,1") { handler.post { sendEvent("#HM,0") }; return }
         if(msg=="CAP,BLD,1") {
             handler.post { if(!buildingsSupported) { buildingsSupported=true;MapFeeder.onBuildingCapability() } }

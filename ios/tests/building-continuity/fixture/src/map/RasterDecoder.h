@@ -2,6 +2,8 @@
 #include "../../RasterBuildingCarry.h"
 bool rasterBuildingCarryOn=false; // Explicit App opt-in; old clients keep prior behaviour.
 bool rasterCarriesBuildings=false;
+// Carry/clear can alter the rendered pixels relative to the sender's XOR reference.
+bool rasterDeltaBaseClean=false;
 uint32_t rasterBuildingCarryEpoch=0;
 // 位图地图及罪恶都市轮廓解码。由 MotoNav.ino 按依赖顺序包含，仅编译一次。
 // v2.5 解析图片地图：u16 坐标系, i32 左上角 x, i32 左上角 y, u16 宽, u16 高, u16 每像素毫米, 然后是压缩的颜色编号
@@ -131,6 +133,7 @@ void prepareVicePalette(const uint16_t *pal) {
 }
 
 void parseRasterLegacy(const uint8_t *p, uint32_t len) {
+  rasterDeltaBaseClean=false;
   rasterValid = false;
   rasterViceValid = false;
   if (len < 16) return;
@@ -200,18 +203,66 @@ void parseRasterLegacy(const uint8_t *p, uint32_t len) {
 
 // 普通地图先在备用缓冲解码，成功后交换；上一块保留，用来补齐新块的覆盖边缘。
 bool parseRaster(const uint8_t *p, uint32_t len) {
+  RasterHeader probe;
+  const uint8_t *src = p;
+  uint32_t srcLen = len;
+  uint8_t *unpacked = nullptr;
+  if (rasterHeaderCheck(p, len, probe, RASTER_MAX_PX, RASTER_BUF_BYTES) && probe.deflate) {
+    if (len < probe.dataStart + 6) return false;
+    uint32_t rawRleLen = rasterU32(p + probe.dataStart);
+    uint32_t compLen = len - probe.dataStart - 4;
+    if (rawRleLen == 0 || probe.dataStart + rawRleLen > RASTER_MAX_BYTES) return false;
+    unpacked = (uint8_t *)ps_malloc(probe.dataStart + rawRleLen);
+    if (!unpacked) return false;
+    if (!viceInflater) viceInflater = (tinfl_decompressor *)malloc(sizeof(tinfl_decompressor));
+    if (!viceInflater) { free(unpacked); return false; }
+    memcpy(unpacked, p, probe.dataStart);
+    uint16_t cleanFlags = rasterU16(p + 14) & ~RASTER_FLAG_DEFLATE;
+    unpacked[14] = (uint8_t)(cleanFlags & 0xFF);
+    unpacked[15] = (uint8_t)(cleanFlags >> 8);
+    tinfl_init(viceInflater);
+    size_t inBytes = compLen, outBytes = rawRleLen;
+    tinfl_status status = tinfl_decompress(viceInflater, p + probe.dataStart + 4, &inBytes,
+        unpacked + probe.dataStart, unpacked + probe.dataStart, &outBytes,
+        TINFL_FLAG_PARSE_ZLIB_HEADER | TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF);
+    if (status != TINFL_STATUS_DONE || inBytes != compLen || outBytes != rawRleLen) {
+      free(unpacked);
+      return false;
+    }
+    src = unpacked;
+    srcLen = probe.dataStart + rawRleLen;
+  }
   RasterHeader next;
-  if (!rasterCheck(p,len,next,RASTER_MAX_PX,RASTER_BUF_BYTES)) return false;
-  if (next.dataEnd != len) {
+  if (!rasterCheck(src,srcLen,next,RASTER_MAX_PX,RASTER_BUF_BYTES)) {
+    if (unpacked) free(unpacked);
+    return false;
+  }
+  if (next.dataEnd != srcLen) {
+    if (unpacked) { free(unpacked); return false; }
     // 保留既有轮廓扩展的兼容路径；新 App 只发送无扩展的普通底图。
     if (len-next.dataEnd<8 || p[next.dataEnd]!='V' || p[next.dataEnd+1]!='C' || p[next.dataEnd+2]!='E') return false;
     rasterBackValid=false;
     parseRasterLegacy(p,len);
     return rasterValid;
   }
+  if (next.delta) {
+    bool canDelta = rasterDeltaBaseClean && rasterValid && !rasterViceValid && !rasHasPal &&
+        rasterFrame == next.frame && rasW == next.width && rasH == next.height &&
+        (uint16_t)lroundf(rasMpp * 1000) == next.mm &&
+        rasX0 == next.refX0 && rasY0 == next.refY0 &&
+        rasterAllocatedBytes == RASTER_BUF_BYTES && rasterBuf != nullptr;
+    if (!canDelta) {
+      if (unpacked) free(unpacked);
+      return false;
+    }
+  }
   if (!rasterBackBuf) rasterBackBuf=(uint8_t *)ps_malloc(RASTER_BUF_BYTES);
-  if (!rasterBackBuf) return false;
-  rasterDecode(p,next,rasterBackBuf);
+  if (!rasterBackBuf) {
+    if (unpacked) free(unpacked);
+    return false;
+  }
+  rasterDecode(src,next,rasterBackBuf,next.delta ? rasterBuf : nullptr);
+  if (unpacked) free(unpacked);
   RasterHeader old = {};
   old.frame=rasterFrame; old.x0=rasX0; old.y0=rasY0; old.width=rasW; old.height=rasH;
   old.mm=(uint16_t)lroundf(rasMpp*1000); old.blocksWide=rasBW;
@@ -219,7 +270,9 @@ bool parseRaster(const uint8_t *p, uint32_t len) {
       rasterFrame==next.frame && old.mm==next.mm && rasterAllocatedBytes==RASTER_BUF_BYTES;
   old.palette=rasHasPal;old.buildings=rasterCarriesBuildings;
   old.bytes=(size_t)old.blocksWide*((old.height+15)/16)*128;
-  if(keep && rasterBuildingCarryOn && themeIdx==1) rasterCarryRoofs(rasterBuf,old,rasterBackBuf,next);
+  rasterDeltaBaseClean=true;
+  if(keep && rasterBuildingCarryOn && themeIdx==1 && rasterCarryRoofs(rasterBuf,old,rasterBackBuf,next)>0)
+    rasterDeltaBaseClean=false;
   uint8_t *oldPixels=rasterBuf;
   rasterBuf=rasterBackBuf;
   rasterBackBuf=oldPixels;
@@ -243,6 +296,7 @@ void setRasterBuildingCarry(bool on) {
     RasterHeader h={};h.bytes=(size_t)rasBW*((rasH+15)/16)*128;
     if(h.bytes<=RASTER_BUF_BYTES) rasterClearRoofs(rasterBuf,h);
     rasterCarriesBuildings=false;
+    rasterDeltaBaseClean=false;
   }
   if(rasterBackValid) rasterClearRoofs(rasterBackBuf,rasterBackHeader);
   navDirty=true;
