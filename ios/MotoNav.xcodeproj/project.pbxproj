@@ -420,10 +420,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				89775CCDB79F2856E5A7E09E /* AmapWebSession.swift in Sources */,
-				4BF4E115BA533B657E2FB1F6 /* RouteWaypointEditor.swift in Sources */,
-				68F4F866272A2D0FA9BA30D6 /* MotorPlanHistory.swift in Sources */,
-				504FC21197979CFC1DC66A01 /* PhoneClockSync.swift in Sources */,
 				DB621FCC696122DC6BCCCDCA /* ShareViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -432,6 +428,10 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				504FC21197979CFC1DC66A01 /* PhoneClockSync.swift in Sources */,
+				68F4F866272A2D0FA9BA30D6 /* MotorPlanHistory.swift in Sources */,
+				4BF4E115BA533B657E2FB1F6 /* RouteWaypointEditor.swift in Sources */,
+				89775CCDB79F2856E5A7E09E /* AmapWebSession.swift in Sources */,
 				CE38FAAF34CBBFAD84451088 /* Config.swift in Sources */,
 				637279724CB8969F644B3AC5 /* WebMotor.swift in Sources */,
 				3B8784BF43A12D42870A243A /* MotorRouteTracker.swift in Sources */,
