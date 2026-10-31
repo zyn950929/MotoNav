@@ -56,6 +56,9 @@ struct MotoNavApp: App {
             ContentView()
                 .background(AmapCaptureSurface().frame(width: 1, height: 1))
                 .preferredColorScheme(.dark)
+                .onReceive(NotificationCenter.default.publisher(for:UIApplication.didBecomeActiveNotification)){_ in
+                    BleLink.shared.syncPhoneClock(force:true)
+                }
         }
     }
 }

@@ -206,7 +206,7 @@ struct ContentView: View {
             if !pendingShare.isEmpty && !shareBusy {
                 Button("网页验证后重试"){showShareVerification=true}.foregroundColor(Self.cyan)
             }
-            if addingVia{Button("搜索附近加油站"){query="加油站";search.search(query)}.foregroundColor(Self.cyan)}
+            if addingVia{Button("搜索附近加油站"){query="加油站";search.searchFuel()}.foregroundColor(Self.cyan)}
             if !search.status.isEmpty { Text(search.status).font(.footnote).foregroundColor(ContentView.sub) }
             ForEach(search.results.prefix(8)) { p in
                 Button { choose(p) } label: {

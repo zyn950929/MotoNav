@@ -16,7 +16,7 @@ struct RoutePointPicker: View {
                         TextField("输入地点名称",text:$query).submitLabel(.search).onSubmit{runSearch()}
                         Button("搜索"){runSearch()}
                     }
-                    Button("搜索附近加油站"){query="加油站";runSearch()}
+                    Button("搜索附近加油站"){query="加油站";search.searchFuel(near:near.map{($0.lat,$0.lng)})}
                     if !search.status.isEmpty{Text(search.status).font(.caption)}
                 }
                 if !search.results.isEmpty {
@@ -86,6 +86,7 @@ struct MotorHistoryView:View {
     let bicycle:Bool
     let choose:(SavedMotorPlan)->Void
     @ObservedObject private var history=MotorPlanHistory.shared
+    @State private var confirmClear=false
     @Environment(\.dismiss) private var dismiss
     private var plans:[SavedMotorPlan]{history.plans.filter{$0.request.bicycle==bicycle}}
     var body:some View {
@@ -103,8 +104,11 @@ struct MotorHistoryView:View {
                 }
             }.navigationTitle(bicycle ? "自行车路线历史":"摩托车路线历史").toolbar {
                 ToolbarItem(placement:.cancellationAction){Button("关闭"){dismiss()}}
-                ToolbarItem(placement:.confirmationAction){Button("清空"){history.clear(bicycle:bicycle)}.disabled(plans.isEmpty)}
+                ToolbarItem(placement:.confirmationAction){Button("清空"){confirmClear=true}.disabled(plans.isEmpty)}
             }
+        }.confirmationDialog("清空当前类型的路线历史？",isPresented:$confirmClear,titleVisibility:.visible){
+            Button("清空路线历史",role:.destructive){history.clear(bicycle:bicycle)}
+            Button("取消",role:.cancel){}
         }.preferredColorScheme(.dark)
     }
 }

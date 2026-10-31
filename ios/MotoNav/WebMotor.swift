@@ -352,23 +352,56 @@ struct MotorBrowserView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView { browser.web }
     func updateUIView(_ uiView: WKWebView,context: Context) {}
 }
-struct MotorMap: UIViewRepresentable {
-    let route: MotorRoute; let position: MotorPoint?; let overview: Bool
-    func makeCoordinator() -> RouteMapDelegate { RouteMapDelegate() }
-    func makeUIView(context: Context) -> MAMapView {
-        let map = MAMapView(frame: .zero); map.mapType=Settings.shared.paletteNight ? .standardNight : .standard; map.delegate = context.coordinator.asDelegate; map.showsCompass = false; return map
+struct MotorMap:UIViewRepresentable {
+    let route:MotorRoute;let position:MotorPoint?;let overview:Bool
+    final class Coordinator {
+        let delegate=RouteMapDelegate()
+        var routeID:UUID?
+        var overview:Bool?
+        var position:MotorPoint?
+        var positionPin:MAPointAnnotation?
+        var line:MAPolyline?
     }
-    func updateUIView(_ map: MAMapView, context: Context) {
-        map.mapType=Settings.shared.paletteNight ? .standardNight : .standard
-        let key = route.id.uuidString + "-\(overview)"
-        if context.coordinator.key != key {
-            context.coordinator.key = key; map.removeOverlays(map.overlays)
-            var coords = route.points.map { CLLocationCoordinate2D(latitude: $0.lat,longitude: $0.lng) }
-            if let line = MAPolyline(coordinates: &coords,count: UInt(coords.count)) { line.title = "sel"; map.addOverlays([line]); if overview { map.showOverlays([line],edgePadding: .init(top: 40,left: 30,bottom: 40,right: 30),animated: false) } }
+    func makeCoordinator()->Coordinator{Coordinator()}
+    func makeUIView(context:Context)->MAMapView{
+        let map=MAMapView(frame:.zero)
+        map.mapType=Settings.shared.paletteNight ? .standardNight:.standard
+        map.delegate=context.coordinator.delegate.asDelegate;map.showsCompass=false;return map
+    }
+    func updateUIView(_ map:MAMapView,context:Context){
+        let c=context.coordinator
+        let type:MAMapType=Settings.shared.paletteNight ? .standardNight:.standard
+        if map.mapType != type{map.mapType=type}
+        let routeChanged=c.routeID != route.id
+        if routeChanged{
+            c.routeID=route.id;c.position=nil;c.positionPin=nil
+            if let overlays=map.overlays{map.removeOverlays(overlays)}
+            if let annotations=map.annotations{map.removeAnnotations(annotations.filter{!($0 is MAUserLocation)})}
+            var coords=route.points.map{CLLocationCoordinate2D(latitude:$0.lat,longitude:$0.lng)}
+            c.line=MAPolyline(coordinates:&coords,count:UInt(coords.count));c.line?.title="sel"
+            if let line=c.line{map.addOverlays([line])}
+            let marks=[route.request.start]+route.request.vias+[route.request.end]
+            for (i,p) in marks.enumerated(){
+                let mark=MAPointAnnotation();mark.coordinate=CLLocationCoordinate2D(latitude:p.lat,longitude:p.lng)
+                mark.title=i==marks.count-1 ? "目的地":i==0 ? "起点":"途经 \(i)";map.addAnnotation(mark)
+            }
         }
-        if let p = position, !overview { map.setCenter(CLLocationCoordinate2D(latitude: p.lat,longitude: p.lng),animated: false); map.setZoomLevel(17,animated: false) }
-        map.removeAnnotations(map.annotations.filter { !($0 is MAUserLocation) })
-        if let p = position { let pin = MAPointAnnotation(); pin.coordinate = .init(latitude: p.lat,longitude: p.lng); pin.title = "当前位置"; map.addAnnotation(pin) }
+        if overview,(routeChanged || c.overview != overview),let line=c.line{
+            map.showOverlays([line],edgePadding:UIEdgeInsets(top:40,left:30,bottom:40,right:30),animated:false)
+        }
+        if let p=position{
+            let changed=c.position.map{RouteShape.metres($0,p)>=0.5} ?? true
+            if changed{
+                c.position=p
+                if c.positionPin==nil{let pin=MAPointAnnotation();pin.title="当前位置";c.positionPin=pin;map.addAnnotation(pin)}
+                c.positionPin?.coordinate=CLLocationCoordinate2D(latitude:p.lat,longitude:p.lng)
+            }
+            if !overview,(changed || routeChanged || c.overview != overview){
+                map.setCenter(CLLocationCoordinate2D(latitude:p.lat,longitude:p.lng),animated:false)
+                if routeChanged || c.overview != overview{map.setZoomLevel(17,animated:false)}
+            }
+        }
+        c.overview=overview
     }
 }
 struct WebMotorView: View {

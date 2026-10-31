@@ -21,6 +21,7 @@ final class SearchService: NSObject, ObservableObject {
     @Published var results: [Place] = []
     @Published var status = ""
     private var api: AMapSearchAPI?
+    private var fuelRequest:AMapPOIAroundSearchRequest?
     private var activeSearch=""
     private var cache: [String: [Place]] = [:]         // 关键词 → 结果（只存在内存里）
 
@@ -41,6 +42,7 @@ final class SearchService: NSObject, ObservableObject {
 
     /// 按了“搜索”时调用（每按一次最多查一次高德）
     func search(_ text: String, near: (Double,Double)? = nil) {
+        fuelRequest=nil
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.isEmpty { clear(); return }
         let around=near ?? LocationService.shared.location.map{l -> (Double,Double) in
@@ -61,7 +63,30 @@ final class SearchService: NSObject, ObservableObject {
         api?.aMapInputTipsSearch(req)
     }
 
-    func clear() { activeSearch="";results = []; status = "" }
+    func clear() { fuelRequest=nil;activeSearch="";results = []; status = "" }
+
+    func searchFuel(near:(Double,Double)?=nil){
+        let center=near ?? LocationService.shared.location.flatMap{fix -> (Double,Double)? in
+            guard fix.horizontalAccuracy>=0,abs(fix.timestamp.timeIntervalSinceNow)<60 else{return nil}
+            let g=MapGeo.wgsToGcj(fix.coordinate.latitude,fix.coordinate.longitude);return(g.lat,g.lng)
+        }
+        guard let center=center,MotorRequest.valid(center.0,center.1) else{status="请等待定位，或先选择规划起点";return}
+        let request=AMapPOIAroundSearchRequest()
+        request.location=AMapGeoPoint.location(withLatitude:CGFloat(center.0),longitude:CGFloat(center.1))
+        request.keywords="加油站";request.types="010100";request.sortrule=0;request.radius=10000;request.offset=20
+        activeSearch="fuel";fuelRequest=request;results=[];status="搜索附近加油站…"
+        api?.aMapPOIAroundSearch(request)
+    }
+
+    @objc(onPOISearchDone:response:)
+    func mnFuelDone(_ request:AMapPOISearchBaseRequest?,response:AMapPOISearchResponse?){
+        guard request === fuelRequest,activeSearch=="fuel" else{return}
+        results=(response?.pois ?? []).compactMap{poi -> Place? in
+            guard let point=poi.location,MotorRequest.valid(Double(point.latitude),Double(point.longitude)) else{return nil}
+            return Place(name:poi.name ?? "加油站",address:poi.address ?? "",lat:Double(point.latitude),lng:Double(point.longitude))
+        }
+        status=results.isEmpty ? "附近十公里未找到加油站，可输入名称搜索":"按距离显示附近加油站"
+    }
 
     @objc(onInputTipsSearchDone:response:)
     func mnTipsDone(_ request: AMapInputTipsSearchRequest?, response: AMapInputTipsSearchResponse?) {
