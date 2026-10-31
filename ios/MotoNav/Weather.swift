@@ -126,7 +126,17 @@ final class Weather: ObservableObject {
         }
         var sources = ["和风天气 QWeather · https://www.qweather.com/", "https://developer.qweather.com/attribution.html"]
         for item in r { sources += dict(item?["metadata"])["attributions"] as? [String] ?? [] }
-        detail = (["\(place) · \(text) \(Int(temp.rounded()))°", windText, rain, air] + alerts.map { [ $0["headline"], $0["description"], $0["instruction"] ].compactMap { $0 as? String }.joined(separator: "\n") } + [title] + allNotes + Array(Set(sources)).sorted() + ["预警可能延迟，请以官方最新发布为准。更新：\(f.string(from: Date()))"]).joined(separator: "\n\n")
+        var detailParts:[String] = ["\(place) · \(text) \(Int(temp.rounded()))°", windText, rain, air]
+        let warningDetails:[String] = alerts.map { alert in
+            let fields:[String] = [alert["headline"],alert["description"],alert["instruction"]].compactMap{$0 as? String}
+            return fields.joined(separator:"\n")
+        }
+        detailParts.append(contentsOf:warningDetails)
+        detailParts.append(title)
+        detailParts.append(contentsOf:allNotes)
+        detailParts.append(contentsOf:Array(Set(sources)).sorted())
+        detailParts.append("预警可能延迟，请以官方最新发布为准。更新：\(f.string(from: Date()))")
+        detail = detailParts.joined(separator:"\n\n")
         info = "\(place) \(text) \(Int(temp.rounded()))°；逐小时 \(hours.count) 个" + (allNotes.isEmpty ? "" : "；" + allNotes.joined(separator: "；"))
         lastAt = Date(); push()
     }

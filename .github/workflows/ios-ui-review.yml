@@ -2,7 +2,7 @@ name: iOS interface review
 on:
   push:
     branches: [codex/ios-parity-016-20261031]
-    paths: ['.github/workflows/ios-ui-review.yml']
+    paths: ['ios/**', '.github/workflows/ios-ui-review.yml']
   workflow_dispatch:
 permissions:
   contents: read
