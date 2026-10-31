@@ -13,7 +13,7 @@ import Foundation
 /// 注意：第 2 步用的是高德网页内部接口，不是公开接口，高德改了就会失效（到时候要跟着改）；仅供个人使用。
 /// 这里的网络函数都是同步的，只在后台队列里调用。
 enum AmapShare {
-    private static let UA = "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+    static let UA = "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
     static let MAX_WAYPOINTS = 15               // 高德 SDK 最多 16 个途经点，留一个余量
 
     typealias LL = (lat: Double, lng: Double)

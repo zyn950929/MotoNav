@@ -47,7 +47,7 @@ private struct ShareVerificationBrowser:UIViewRepresentable {
     func makeUIView(context:Context)->WKWebView {
         let config=WKWebViewConfiguration();config.websiteDataStore = .default()
         let web=WKWebView(frame:.zero,configuration:config)
-        web.customUserAgent=MotorRoutes.ua;web.navigationDelegate=context.coordinator
+        web.customUserAgent=AmapShare.UA;web.navigationDelegate=context.coordinator
         web.load(URLRequest(url:page));return web
     }
     func updateUIView(_ view:WKWebView,context:Context){}
