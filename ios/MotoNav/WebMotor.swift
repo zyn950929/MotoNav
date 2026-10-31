@@ -46,10 +46,12 @@ struct MotorStep { let instruction: String; let road: String; let action: String
 }
 struct MotorRoute: Identifiable {
     let id = UUID(); let request: MotorRequest; let points: [MotorPoint]; let steps: [MotorStep]; let seconds: Int
+    let detailedGuidance: Bool
     private let cumulative: [Double]
     private let coordinates: [(lat:Double,lng:Double)]
-    init(request: MotorRequest, points: [MotorPoint], steps: [MotorStep], seconds: Int) {
+    init(request: MotorRequest, points: [MotorPoint], steps: [MotorStep], seconds: Int, detailedGuidance: Bool = true) {
         self.request=request;self.points=points;self.steps=steps;self.seconds=seconds
+        self.detailedGuidance=detailedGuidance
         cumulative=RouteShape(points:points).cum
         coordinates=points.map{($0.lat,$0.lng)}
     }
@@ -312,7 +314,7 @@ final class WebMotorSession: ObservableObject {
             footerSent = footer
             if let img = TextImage.render(footer,maxW:240,size:19,minSize:15) { BleLink.shared.sendImage(slot:1,w:img.w,h:img.h,data:img.data) }
         }
-        if off <= 60, announced != "\(stepIndex)-\(distance/100)", distance <= 500 {
+        if route.detailedGuidance, off <= 60, announced != "\(stepIndex)-\(distance/100)", distance <= 500 {
             announced = "\(stepIndex)-\(distance/100)"; Speech.shared.speak("前方\(distance)米，\(instruction)")
         }
         let end = route.points.last!

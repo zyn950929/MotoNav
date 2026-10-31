@@ -358,7 +358,6 @@ enum MapGeo {
         if sat > 0.10 && hue >= 60 && hue <= 170 { return PX_PARK }
         if sat > 0.18 && hue >= 10 && hue <= 60 { return PX_ROAD }        // 黄色、橙色的主干道
         let l=lum(c)
-        if sat < 0.10, abs(l-bgLum)>=22,l>=110,l<=250 {return PX_ROAD}
         if l >= bgLum + 6 { return PX_ROAD }                          // 比底色亮的白色道路
         return PX_BLOCK                                                    // 深色细线（楼块轮廓、图标、描边）不当道路
     }
@@ -367,11 +366,57 @@ enum MapGeo {
     static func classifyAmapBase(_ raw:[UInt32],w:Int,h:Int)->[UInt8] {
         let bg=backgroundLum(raw)
         var colors:[UInt32:UInt8]=[:]
-        let classified=raw.map{c -> UInt8 in
+        var classified=raw.map{c -> UInt8 in
             if let known=colors[c]{return known}
             let value=classifyPixel(c,bg);colors[c]=value;return value
         }
+        recoverGrayRoads(raw, background: bg, into: &classified, w: w, h: h)
         return dilateRoads(cleanRaster(classified,w:w,h:h),w:w,h:h)
+    }
+
+    /// Gray roofs and gray pavement cannot be distinguished by colour alone.
+    /// Recover only long, directionally coherent gray components; compact roofs,
+    /// text and two-dimensional meshes must remain ground rather than black roads.
+    private static func recoverGrayRoads(_ raw: [UInt32], background: Int, into result: inout [UInt8], w: Int, h: Int) {
+        guard w > 0, h > 0, raw.count == w*h else { return }
+        var candidates = [UInt8](repeating: 0, count: raw.count)
+        var colors: [UInt32: Bool] = [:]
+        for i in raw.indices where result[i] == PX_BLOCK {
+            let c = raw[i]
+            let gray: Bool
+            if let cached = colors[c] { gray = cached }
+            else {
+                let r=Int(c>>16&255),g=Int(c>>8&255),b=Int(c&255),high=max(r,g,b),low=min(r,g,b)
+                gray = high > 0 && (high-low)*100 < high*10 && lum(c)>=110 && lum(c)<=background-22
+                colors[c]=gray
+            }
+            if gray { candidates[i]=1 }
+        }
+        var component: [Int] = []
+        component.reserveCapacity(raw.count/16)
+        let minimumSpan=Double(max(80,min(w,h)/5))
+        for start in candidates.indices where candidates[start] == 1 {
+            component.removeAll(keepingCapacity: true)
+            component.append(start);candidates[start]=2
+            var head=0,minX=w,maxX=0,minY=h,maxY=0
+            var sx=0.0,sy=0.0,sxx=0.0,syy=0.0,sxy=0.0
+            while head < component.count {
+                let p=component[head],x=p%w,y=p/w;head+=1
+                minX=min(minX,x);maxX=max(maxX,x);minY=min(minY,y);maxY=max(maxY,y)
+                let dx=Double(x),dy=Double(y)
+                sx+=dx;sy+=dy;sxx+=dx*dx;syy+=dy*dy;sxy+=dx*dy
+                func visit(_ q:Int) { if candidates[q] == 1 { candidates[q]=2;component.append(q) } }
+                if x>0 {visit(p-1)};if x+1<w {visit(p+1)}
+                if y>0 {visit(p-w)};if y+1<h {visit(p+w)}
+            }
+            guard component.count>=60,Double(max(maxX-minX+1,maxY-minY+1))>=minimumSpan else {continue}
+            let count=Double(component.count)
+            let xx=max(0,sxx/count-pow(sx/count,2)),yy=max(0,syy/count-pow(sy/count,2)),xy=sxy/count-sx*sy/(count*count)
+            let separation=sqrt(max(0,(xx-yy)*(xx-yy)+4*xy*xy))
+            let major=(xx+yy+separation)/2,minor=max(1,(xx+yy-separation)/2)
+            guard major>=12*minor else {continue}
+            for p in component {result[p]=PX_ROAD}
+        }
     }
     static func minMaterialPixels(w:Int,h:Int)->Int {max(4,(w*h)/1250)}
     static func materialPixelCount(_ pixels:[UInt8])->Int {pixels.reduce(0){$0+($1==0 ? 0:1)}}

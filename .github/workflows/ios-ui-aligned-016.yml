@@ -1,14 +1,14 @@
-name: iOS 0.16 UI aligned build2
+name: iOS 0.16 map and bicycle fix build3
 on:
   push:
-    branches: [codex/ios-016-ui-align-20261031]
+    branches: [codex/ios-016-map-cycle-fix-20261031]
     paths: ['ios/**', '.github/workflows/ios-ui-aligned-016.yml']
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: motonav-ios-ui-aligned-016
+  group: motonav-ios-map-cycle-fix-build3
   cancel-in-progress: true
 jobs:
   ipa:
@@ -70,18 +70,18 @@ jobs:
           set -euo pipefail
           APP="$RUNNER_TEMP/Derived/Build/Products/Release-iphoneos/MotoNav.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Info.plist")" = '0.16.0'
-          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Info.plist")" = '2'
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Info.plist")" = '3'
           test -f "$APP/PlugIns/MotoNavShare.appex/MotoNavShare"
           mkdir -p output/ios "$RUNNER_TEMP/Stage/Payload"
           ditto "$APP" "$RUNNER_TEMP/Stage/Payload/MotoNav.app"
           xcrun strip -S "$RUNNER_TEMP/Stage/Payload/MotoNav.app/MotoNav"
           xcrun strip -S "$RUNNER_TEMP/Stage/Payload/MotoNav.app/PlugIns/MotoNavShare.appex/MotoNavShare"
-          (cd "$RUNNER_TEMP/Stage" && zip -qry "$GITHUB_WORKSPACE/output/ios/MotoNav-0.16.0-ui-aligned-build2-unsigned.ipa" Payload)
+          (cd "$RUNNER_TEMP/Stage" && zip -qry "$GITHUB_WORKSPACE/output/ios/MotoNav-0.16.0-map-cycle-fix-build3-unsigned.ipa" Payload)
           (cd output/ios && shasum -a 256 *.ipa > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: MotoNav-iOS-0.16.0-UI-Build2
+          name: MotoNav-iOS-0.16.0-MapCycle-Build3
           path: |
             output/ios/
             build-ios.log

@@ -55,6 +55,8 @@ final class AmapCaptureHost: NSObject {
             view.addSubview(m); map = m
         }
         m.transform = .identity
+        // Extraction uses a light land/road palette, regardless of the phone UI theme.
+        m.overrideUserInterfaceStyle = .light
         m.bounds = CGRect(x: 0, y: 0, width: size, height: size)
         m.center = CGPoint(x: size / 2, y: size / 2)
         // GLKit uses the displayed geometry for its drawable. A one-point transform produces

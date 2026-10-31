@@ -11,6 +11,8 @@ start=nav.index('    static func distM('); end=nav.index('\n    }',start)+6
 core+='enum NaviBridge {\n'+nav[start:end]+'\n}\n'
 core+=(root/'MotoNav/RouteGeometry.swift').read_text()+'\n'
 core+=(root/'MotoNav/MotorRouteTracker.swift').read_text()+'\n'
+bicycle=(root/'MotoNav/BicycleRoutes.swift').read_text()
+core+=bicycle[bicycle.index('enum BicycleRouteParser'):bicycle.index('/// Public iOS SDK bicycle planning')]+'\n'
 core+=(root/'MotoNav/BleHandshakeClock.swift').read_text()+'\n'
 share=(root/'MotoNav/AmapShare.swift').read_text()
 share=share[:share.index('final class ShareGuide')]
@@ -51,6 +53,7 @@ tests+='\n'+(root/'tests/parity-015/main.swift').read_text()
 core+=(root/'MotoNav/PhoneClockSync.swift').read_text()+'\n'
 core+=(root/'MotoNav/MotorPlanHistory.swift').read_text()+'\n'
 tests+='\n'+(root/'tests/parity-016/main.swift').read_text()
+tests+='\n'+(root/'tests/bicycle-planning/main.swift').read_text()
 folder=Path(tempfile.mkdtemp(prefix='motonav-core-'))
 (folder/'main.swift').write_text('import Foundation\n'+core+tests)
 subprocess.run(['swiftc',str(folder/'main.swift'),'-o',str(folder/'test')],check=True)

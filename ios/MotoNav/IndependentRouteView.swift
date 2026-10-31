@@ -131,6 +131,10 @@ struct IndependentPlannerView:View {
     private func routeOptions(_ route:MotorRoute)->some View {
         VStack(alignment:.leading,spacing:14){
             MotorMap(route:route,position:nil,overview:true).frame(height:260).clipShape(RoundedRectangle(cornerRadius:18))
+            if !route.detailedGuidance {
+                Text("已取得路线轨迹，暂无分段转向指引，请按地图路线行进。")
+                    .font(.footnote).foregroundColor(ContentView.sub)
+            }
             ForEach(Array(model.routes.enumerated()),id:\.offset){i,r in
                 Button{model.selected=i}label:{
                     HStack{
@@ -203,9 +207,11 @@ struct IndependentNavigationView: View {
         if guide.status.contains("正在重新规划") {return "偏离路线，正在重新规划…"}
         if guide.status.contains("已偏离路线") {return "已偏离路线"}
         if guide.status.contains("GPS") {return "定位信号较弱"}
+        if guide.route?.detailedGuidance == false {return "按路线行进 · 暂无分段转向指引"}
         return guide.simulation ? "模拟导航":""
     }
     private var arrow:String {
+        if guide.route?.detailedGuidance == false {return "point.topleft.down.curvedto.point.bottomright.up"}
         switch guide.turnDirection {case "L":return "arrow.turn.up.left";case "R":return "arrow.turn.up.right";case "SL":return "arrow.up.left";case "SR":return "arrow.up.right";case "U":return "arrow.uturn.down";default:return "arrow.up"}
     }
 }

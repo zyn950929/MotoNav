@@ -53,6 +53,7 @@ rejects("Bound route node count") { _ = try RouteMapPlan([(0, 0), (20_000_000, 0
 let n = RasterPacket.size
 var pixels = [UInt8](repeating: 0, count: n * n)
 pixels[0] = 1; pixels[1] = 2; pixels[2] = 3
+for y in 0..<n { for x in 590..<610 {pixels[y*n+x]=1} }
 let packet = MapGeo.encodeRaster(frameId: 77, x0: -1200, y0: 1200, w: n, h: n, mmPerPx: 2000, idx: pixels)
 check(RasterPacket.valid(packet, frame: 77, x: -1200, y: 1200), "Raster RLE protocol")
 check(RasterPacket.decode(packet) == pixels, "Raster exact roundtrip")
@@ -114,14 +115,14 @@ check(cache.read(frame: frame, source: 3, buildings: false, node: node) == packe
 check(cache.read(frame: frame, source: 1, buildings: false, node: node) == nil, "Provider-specific caches")
 try cache.store(building, frame: frame, source: 3, node: node)
 check(cache.read(frame: frame, source: 3, buildings: true, node: node) == building, "Separate building and base packets")
-check(FileManager.default.fileExists(atPath: root.appendingPathComponent("styles-v1-1/v2-3-buildings/31.0_121.0/0_0.bin").path), "Use new cache generation for corrected building capture")
-let oldBuildings = root.appendingPathComponent("styles-v1-1/v1-3-buildings/31.0_121.0/0_0.bin")
+check(FileManager.default.fileExists(atPath: root.appendingPathComponent("styles-v2-1/v2-3-buildings/31.0_121.0/0_0.bin").path), "Use new cache generation for corrected building capture")
+let oldBuildings = root.appendingPathComponent("styles-v2-1/v1-3-buildings/31.0_121.0/0_0.bin")
 try FileManager.default.createDirectory(at: oldBuildings.deletingLastPathComponent(), withIntermediateDirectories: true)
 try building.write(to: oldBuildings)
-try FileManager.default.removeItem(at: root.appendingPathComponent("styles-v1-1/v2-3-buildings/31.0_121.0/0_0.bin"))
+try FileManager.default.removeItem(at: root.appendingPathComponent("styles-v2-1/v2-3-buildings/31.0_121.0/0_0.bin"))
 check(cache.read(frame: frame, source: 3, buildings: true, node: node) == nil, "Old unreliable completed building cache ignored")
 rejects("Reject invalid cache origin") { try cache.store(packet, frame: frame, source: 3, node: plan.nodes[1]) }
-let url = root.appendingPathComponent("styles-v1-1/v1-3-base/31.0_121.0/0_0.bin")
+let url = root.appendingPathComponent("styles-v2-1/v1-3-base/31.0_121.0/0_0.bin")
 try Data(packet.dropLast()).write(to: url)
 check(cache.read(frame: frame, source: 3, buildings: false, node: node) == nil, "Ignore corrupted files")
 check(cache.read(frame: frame, source: 3, buildings: false, node: node, style: 0) == nil, "Original style never reads Vice City cache")
