@@ -76,6 +76,27 @@ enum RasterPacket {
     }
 }
 
+enum MapStyleTransfer {
+    static func command(_ style:Int)->String {"#t,\(style),1"}
+    static func matches(_ packet:Data,style:Int)->Bool {
+        guard RasterPacket.valid(packet) else {return false}
+        let bytes=[UInt8](packet),flags=RasterPacket.u16(bytes,14)
+        if style==0 {return flags&0x8000 != 0}
+        if style==1 {return flags&0x8000 == 0}
+        if style==5 {
+            guard flags==2000 else {return false}
+            var p=16
+            while p<bytes.count {
+                let v=bytes[p];p+=1
+                if v&15>1 {return false}
+                if v>>4==15 {p+=1}
+            }
+        }
+        return true
+    }
+}
+
+
 enum AmapCapturePolicy {
     // SDK zoom is based on logical view bounds, not on Retina screenshot pixel count.
     // Keep the 3x drawable below 4096 pixels; 1200 points still exceeds zoom 17

@@ -37,6 +37,11 @@ struct BleBulkWriteQueue {
         // An application K can arrive before the ATT callback; still wait for that callback.
     }
     mutating func reset() { parts.removeAll(); latest.removeAll(); acknowledged.removeAll(); inFlight = nil }
+    /// Keep the ATT callback slot occupied, but retire all queued packets of these kinds.
+    mutating func cancel(types:Set<Int>) {
+        parts.removeAll{types.contains($0.type)}
+        for type in types {latest.removeValue(forKey:type);acknowledged.removeValue(forKey:type)}
+    }
 }
 
 enum BleOutboundPriority {

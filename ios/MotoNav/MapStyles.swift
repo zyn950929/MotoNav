@@ -1,5 +1,6 @@
 import Foundation
 
+
 enum MapStyles {
     static func original(_ raw: [UInt32]) -> (indices: [UInt8], palette: [Int]) {
         var counts: [Int: Int] = [:]

@@ -55,6 +55,7 @@ final class MapFeeder: ObservableObject {
     private var chunkId = 0
     private var chunkType = TYPE_CHUNK
     private var chunkBytes: Data?
+    private var chunkStyle:Int?
     private var chunkSat = false
     private var chunkSentAt = Date.distantPast
 
@@ -101,8 +102,26 @@ final class MapFeeder: ObservableObject {
         buildingInfo = ""; lastBuildingTry = .distantPast
         workToken.cancel(); requestSerial += 1; fetching = false
         haveChunk = false; lastFetchFail = .distantPast
+        chunkBytes=nil;chunkStyle=nil;chunkAcked=false
+        BleLink.shared.cancelMapTransfers()
         offlineMaps?.close(); offlineMaps = nil; offlineKey = ""; routeProgress = -1
         if preparedCoords.count >= 2 { prepareRoute(key: preparedKey, coords: preparedCoords) }
+        // A style change must fetch new data even while simulation/location is paused.
+        let requestedStyle=Settings.shared.theme
+        DispatchQueue.main.async { [weak self] in
+            guard let self=self,Settings.shared.theme==requestedStyle,self.enabled,requestedStyle != 11,
+                  !self.fetching,let f=self.frame,let p=self.pose else {return}
+            self.fetchChunk(f,p.x,p.y)
+        }
+    }
+    func requestMapSample() {
+        guard [0,1,5].contains(Settings.shared.theme),frame != nil,pose != nil else {
+            MapSampleReport.shared.fail("请先开始一次导航或模拟，再生成地图对照图。");return
+        }
+        let f=frame!,p=pose!
+        resetChunk()
+        // No cache node: the report must come from a new capture of the current area.
+        fetchChunk(f,p.x,p.y)
     }
     func onBuildingCapability() { if Settings.shared.mapSource == Self.SRC_AMAP { resetChunk() } }
     private func ensureFrame(lat: Double, lng: Double) -> MapGeo.Frame {
@@ -193,6 +212,7 @@ final class MapFeeder: ObservableObject {
     }
     private func acceptChunk(_ b: Data, cx: Double, cy: Double, sat: Bool, type: Int, info: String, src: Int) {
         guard enabled, Settings.shared.theme != 11 else { return }
+        guard sat || MapStyleTransfer.matches(b,style:Settings.shared.theme) else {return}
         if let p = pose, !sat, src == Self.SRC_AMAP,
            !MapCoveragePolicy.covers(x: p.x, y: p.y, cx: cx, cy: cy, kmh: p.kmh) {
             MapPipelineTrace.event("packet-outside-view", ["buildings": RasterPacket.isBuilding(b)]); return
@@ -215,6 +235,7 @@ final class MapFeeder: ObservableObject {
             return
         }
         chunkBytes = displayBytes
+        chunkStyle=Settings.shared.theme
         chunkBuildingsComplete = complete
         haveChunk = true; chunkSat = sat; chunkCx = cx; chunkCy = cy
         chunkId = (chunkId + 1) & 0xFF; chunkType = type; chunkAcked = false
@@ -271,14 +292,17 @@ final class MapFeeder: ObservableObject {
             DispatchQueue.main.async {
                 guard serial == self.requestSerial, !token.isCancelled else { return }
                 self.fetching = false
-                guard let packet = bytes else { self.lastFetchFail = Date(); self.status = "地图准备失败，保留已有地图：\(errorText)"; return }
+                guard let packet = bytes else {
+                    self.lastFetchFail = Date();self.status = "地图准备失败，保留已有地图：\(errorText)"
+                    MapSampleReport.shared.failIfWaiting("本次取图未完成，请保持 App 前台后重试。");return
+                }
                 self.acceptChunk(packet, cx: cx, cy: cy, sat: gotSat, type: type, info: info, src: src)
             }
         }
     }
 
     private func sendChunk() {
-        guard let b = chunkBytes, enabled, Settings.shared.theme != 11 else { return }
+        guard let b = chunkBytes, enabled, Settings.shared.theme != 11,chunkStyle==Settings.shared.theme else { return }
         chunkSentAt = Date()
         let wire = BleLink.shared.buildingsSupported ? b : RasterPacket.forLegacy(b)
         MapPipelineTrace.packet(wire, type: chunkType, id: chunkId, ready: BleLink.shared.isReady)

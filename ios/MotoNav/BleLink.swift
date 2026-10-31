@@ -347,6 +347,7 @@ final class BleLink: NSObject, ObservableObject {
 
     /// 还有大块数据没发完
     var bulkPending: Bool { bulkQ.hasData }
+    func cancelMapTransfers() {bulkQ.cancel(types:[1,3])}
     @Published var bulkKB = 0                         // 累计发了多少 KB 地图数据（调试用）
 
     private func enqueue(_ key: String, _ data: Data) {

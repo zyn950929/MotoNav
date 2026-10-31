@@ -30,6 +30,7 @@ struct ContentView: View {
     @State private var showScreens=false
     @State private var confirmForgetPhones=false
     @State private var clockRequested=false
+    @State private var showMapReport=false
     @AppStorage("voice_rate") private var voiceRate = Double(AVSpeechUtteranceDefaultSpeechRate)
     @AppStorage("voice_pitch") private var voicePitch = 1.0
     @AppStorage("voice_id") private var voiceID = ""
@@ -72,6 +73,7 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showWebMotor) { WebMotorView(mode:independentMode) }
         .sheet(isPresented: $showRides) { NavigationView { RideHistoryView() } }
         .sheet(isPresented:$showScreens) { screenPicker }
+        .sheet(isPresented:$showMapReport){MapSampleReportView()}
         .confirmationDialog("让圆屏忘掉其他手机？",isPresented:$confirmForgetPhones,titleVisibility:.visible) {
             Button("忘掉其他手机",role:.destructive){ble.forgetOtherPhones()}
             Button("取消",role:.cancel){}
@@ -800,6 +802,7 @@ struct ContentView: View {
                 .pickerStyle(.segmented)
                 Toggle("清爽模式", isOn: $settings.clean).foregroundColor(AppTheme.text).tint(ContentView.pink)
                 Text("仅保留地图和路线，隐藏其他提示").font(.caption2).foregroundColor(ContentView.sub)
+                Button("地图显示问题：生成对照图"){showMapReport=true}
             }
             Text("夜间配色").foregroundColor(AppTheme.text)
             Picker("夜间配色", selection: $settings.nightMode) {

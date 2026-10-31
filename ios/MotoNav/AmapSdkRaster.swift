@@ -49,20 +49,24 @@ enum AmapSdkRaster {
         if style == 0 {
             let q = MapStyles.original(raw)
             let packet = MapGeo.encodeRaster(frameId: f.id, x0: x, y0: y, w: n, h: n, mmPerPx: 2000, idx: q.indices, pal: q.palette)
+            MapSampleReport.shared.capture(raw:raw,indices:q.indices,palette:q.palette,packet:packet,w:n,h:n,style:style)
             guard packet.count <= 480000, RasterPacket.valid(packet) else { throw MapProcessingError.invalid("高德原版底图过大") }
             onBaseReady?(packet); return RasterResult(bytes: packet, tiles: 1, fromCache: 0)
         }
         if style == 5 {
-            let packet = MapGeo.encodeRaster(frameId: f.id, x0: x, y0: y, w: n, h: n, mmPerPx: 2000, idx: MapStyles.minimal(raw, size: n))
+            let minimal=MapStyles.minimal(raw,size:n)
+            let packet = MapGeo.encodeRaster(frameId: f.id, x0: x, y0: y, w: n, h: n, mmPerPx: 2000, idx: minimal)
+            MapSampleReport.shared.capture(raw:raw,indices:minimal,packet:packet,w:n,h:n,style:style)
             guard RasterPacket.valid(packet) else { throw MapProcessingError.invalid("黑白道路数据无效") }
             onBaseReady?(packet); return RasterResult(bytes: packet, tiles: 1, fromCache: 0)
         }
         let roads=MapGeo.classifyAmapBase(raw,w:n,h:n)
+        let base=MapGeo.encodeRaster(frameId:f.id,x0:x,y0:y,w:n,h:n,mmPerPx:2000,idx:roads)
+        MapSampleReport.shared.capture(raw:raw,indices:roads,packet:base,w:n,h:n,style:style)
         guard MapGeo.materialPixelCount(roads)>=MapGeo.minMaterialPixels(w:n,h:n) else {
             throw MapProcessingError.invalid("底图尚未准备完整，保留已有地图")
         }
         try check()
-        let base = MapGeo.encodeRaster(frameId: f.id, x0: x, y0: y, w: n, h: n, mmPerPx: 2000, idx: roads)
         guard RasterPacket.valid(base) else { throw MapProcessingError.invalid("高德普通底图编码不完整") }
         try check()
         MapPipelineTrace.event("base-ready", ["job": job, "bytes": base.count])

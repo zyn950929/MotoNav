@@ -67,6 +67,7 @@
 		FFF967D50529ED5C2DB09292 /* ConnectPuckSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92CE5A9CBDA26491AF34B348 /* ConnectPuckSceneView.swift */; };
 		B488433BA6139B36367854A9 /* SettingsMenus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FB7FA60139401C9038B5D91 /* SettingsMenus.swift */; };
 		D9F321092230F1FC8B8B23D7 /* RideMapViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEE46421D846391ABEC6699A /* RideMapViews.swift */; };
+		B57B31A65CFD4E0C83913744 /* MapSampleReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 090501FEBA7A432B93BD00AB; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -160,6 +161,7 @@
 		92CE5A9CBDA26491AF34B348 /* ConnectPuckSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectPuckSceneView.swift; sourceTree = "<group>"; };
 		0FB7FA60139401C9038B5D91 /* SettingsMenus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsMenus.swift; sourceTree = "<group>"; };
 		EEE46421D846391ABEC6699A /* RideMapViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideMapViews.swift; sourceTree = "<group>"; };
+		090501FEBA7A432B93BD00AB /* MapSampleReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSampleReport.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -241,6 +243,7 @@
 				6C24EC3EE8F89E19A49E95D0 /* BicycleRoutes.swift */,
 				2F2E96A5A6C7C3BD314CB887 /* RouteGeometry.swift */,
 				5CD06CCAE5FBBFC390CE8A18 /* MapStyles.swift */,
+				090501FEBA7A432B93BD00AB /* MapSampleReport.swift */,
 				DCE8FFA5884B79BE4E0AB803 /* RideTools.swift */,
 				C509D74F9ABCA7DCA7EE9293 /* BleCapabilityProbe.swift */,
 				C25DEB2701614C6B8182A8F4 /* BleWritePacer.swift */,
@@ -469,6 +472,7 @@
 				6B90C21D4B66F0C12248FD31 /* BicycleRoutes.swift in Sources */,
 				DF1DA6D4D4292EF2D1700130 /* RouteGeometry.swift in Sources */,
 				0A1AD8E8441189C00F2C93DC /* MapStyles.swift in Sources */,
+				B57B31A65CFD4E0C83913744 /* MapSampleReport.swift in Sources */,
 				17D9D9E3946788217A8DA318 /* RideTools.swift in Sources */,
 				A498DFFBC648AD34CB8F3920 /* BleCapabilityProbe.swift in Sources */,
 				B25DEB2701614C6B8182A8F4 /* BleWritePacer.swift in Sources */,
@@ -526,7 +530,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = arm64;
@@ -610,7 +614,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MotoNavShare/Info.plist;
@@ -635,7 +639,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = MotoNavShare/Info.plist;
@@ -662,7 +666,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = arm64;
