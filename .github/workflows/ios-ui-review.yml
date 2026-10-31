@@ -1,0 +1,52 @@
+name: iOS interface review
+on:
+  push:
+    branches: [codex/ios-parity-016-20261031]
+    paths: ['.github/workflows/ios-ui-review.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: macos-15-intel
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods/repos
+          key: ios-pods-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
+      - name: Install locked dependencies
+        working-directory: ios
+        timeout-minutes: 10
+        run: |
+          sudo gem install cocoapods -v 1.16.2 --no-document
+          pod _1.16.2_ install --deployment
+      - name: Build simulator for visual review
+        run: |
+          set -o pipefail
+          xcodebuild -workspace ios/MotoNav.xcworkspace -scheme MotoNav -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug -derivedDataPath "$RUNNER_TEMP/UIBuild" ARCHS=x86_64 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= build | tee ui-build.log
+      - name: Capture actual app home screen
+        run: |
+          set -euo pipefail
+          mkdir -p ui-review
+          xcrun simctl list devices available --json > ui-review/devices.json
+          DEVICE=$(python3 -c 'import json;d=json.load(open("ui-review/devices.json"));print(next(x["udid"] for a in d["devices"].values() for x in a if x["name"].startswith("iPhone")))')
+          xcrun simctl boot "$DEVICE"
+          xcrun simctl bootstatus "$DEVICE" -b
+          APP="$RUNNER_TEMP/UIBuild/Build/Products/Debug-iphonesimulator/MotoNav.app"
+          xcrun simctl install "$DEVICE" "$APP"
+          xcrun simctl privacy "$DEVICE" grant location-always com.example.motonav
+          xcrun simctl status_bar "$DEVICE" override --time '09:41' --batteryState charged --batteryLevel 100
+          xcrun simctl launch "$DEVICE" com.example.motonav -key_amap UI_REVIEW_PLACEHOLDER
+          sleep 8
+          xcrun simctl io "$DEVICE" screenshot ui-review/home.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MotoNav-iOS-0.16.0-interface-review
+          path: |
+            ui-review/
+            ui-build.log
