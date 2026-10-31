@@ -106,6 +106,12 @@ final class RouteMapCache {
               style != 1 || RasterPacket.hasMapContent(data) else { throw MapProcessingError.invalid("离线底图校验失败") }
         guard style != 1 || RasterPacket.hasMapContent(data) else {throw MapProcessingError.invalid("空白底图未写入缓存")}
         lock.lock(); defer { lock.unlock() }
+        // Old classified maps are unusable after the gray-roof fix. Reclaim them
+        // before enforcing the quota, so a full old cache cannot block its replacement.
+        if style == 1 {
+            let obsolete=root.appendingPathComponent("styles-v1-1",isDirectory:true)
+            if FileManager.default.fileExists(atPath:obsolete.path) {try FileManager.default.removeItem(at:obsolete)}
+        }
         let file = file(frame: frame, source: source, buildings: RasterPacket.isBuilding(data), node: node, style: style)
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         var folder = root

@@ -49,6 +49,7 @@ try FileManager.default.createDirectory(at:oldCache.deletingLastPathComponent(),
 try packet.write(to:oldCache)
 check(cache.read(frame:frame,source:3,buildings:false,node:node,style:1)==nil,"old over-broad gray classification cache must not be reused")
 try cache.store(packet,frame:frame,source:3,node:node,style:1)
+check(!FileManager.default.fileExists(atPath:oldCache.path),"obsolete gray-map cache must release quota for its replacement")
 do {try cache.store(empty,frame:frame,source:3,node:node,style:1);fatalError("blank cache overwrite accepted")}catch{}
 check(cache.read(frame:frame,source:3,buildings:false,node:node,style:1)==packet,"valid cached map survives rejected blank update")
 try? FileManager.default.removeItem(at:folder)
