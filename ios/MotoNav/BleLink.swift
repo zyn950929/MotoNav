@@ -365,6 +365,7 @@ final class BleLink: NSObject, ObservableObject {
         bulkQ.contains(type:type,id:id) || (type==3 && mapReceipt.blocks(id:id,now:ProcessInfo.processInfo.systemUptime))
     }
     func cancelMapTransfers() {bulkQ.cancel(types:[1,3]);mapReceipt.reset();mapMeter.cancel()}
+    func mapPayloadRemaining(id:Int)->Int {bulkQ.payloadRemaining(type:3,id:id)}
     @Published var bulkKB = 0                         // 累计发了多少 KB 地图数据（调试用）
 
     private func enqueue(_ key: String, _ data: Data) {

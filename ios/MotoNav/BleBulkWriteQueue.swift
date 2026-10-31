@@ -14,6 +14,10 @@ struct BleBulkWriteQueue {
     }
     var canStart: Bool { inFlight == nil && !parts.isEmpty }
     var queuedCount: Int { parts.count }
+    func payloadRemaining(type:Int,id:Int)->Int {
+        let queued=parts.filter{$0.type==type && $0.id==id}.reduce(0){$0+max(0,$1.data.count-15)}
+        return queued + (inFlight.map{$0.type==type && $0.id==id ? max(0,$0.data.count-15):0} ?? 0)
+    }
     var peek:Part? {canStart ? parts.first:nil}
     mutating func replace(type: Int, id: Int, packets: [Data], prioritize: Bool = false) {
         parts.removeAll { $0.type == type }

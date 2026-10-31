@@ -10,6 +10,15 @@ check(BleBulkBarrier.canStart(response:true,canWithout:false),"a scheduled barri
 var q=BleBulkWriteQueue();q.replace(type:3,id:1,packets:[Data([1]),Data([2])])
 let before=q.queuedCount
 check(q.peek?.data==Data([1]) && q.queuedCount==before,"peek does not consume the blocked fragment")
+var pendingBytes=BleBulkWriteQueue()
+pendingBytes.replace(type:3,id:7,packets:[Data(repeating:0,count:500),Data(repeating:0,count:115)])
+check(pendingBytes.payloadRemaining(type:3,id:7)==585,"remaining payload excludes bulk headers")
+_ = pendingBytes.next()
+check(pendingBytes.payloadRemaining(type:3,id:7)==585,"unacknowledged in-flight payload is still counted")
+_ = pendingBytes.complete(success:true)
+check(pendingBytes.payloadRemaining(type:3,id:7)==100,"only remaining bytes budget an ongoing building transfer")
+pendingBytes.cancel(types:[3])
+check(pendingBytes.payloadRemaining(type:3,id:7)==0,"yielding optional detail releases its remaining payload")
 for i in 1...4 {check(!barrier.needsResponse(seq:i,parts:30,retry:false,commandReady:true),"bounded command batch")}
 check(barrier.requiresResponse(seq:5,parts:30,retry:false),"validate after four commands")
 barrier.reset()
