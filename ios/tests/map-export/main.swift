@@ -18,13 +18,14 @@ try FileManager.default.setAttributes([.modificationDate:Date(timeIntervalSince1
 check(request.files==[old],"a new recording cannot replace the file in the already presented sheet")
 let save=try MapExportRequest(files:[next],destination:.save)
 check(save.id != request.id && save.files==[next],"save is a distinct immutable presentation")
-check(MapReportFiles.latestTiming(in:[cache,saved])==next,"newest saved record restores after relaunch")
+print("Recovery candidate:",MapReportFiles.latestTiming(in:[cache,saved])?.path ?? "none", "expected:",next.path)
+check(MapReportFiles.latestTiming(in:[cache,saved])?.resolvingSymlinksInPath().path==next.resolvingSymlinksInPath().path,"newest saved record restores after relaunch")
 let broken=saved.appendingPathComponent("map-timing-broken.json")
 try Data("not JSON".utf8).write(to:broken)
 try FileManager.default.setAttributes([.modificationDate:Date(timeIntervalSince1970:300)],ofItemAtPath:broken.path)
-check(MapReportFiles.latestTiming(in:[cache,saved])==next,"corrupt newer files do not hide a valid record")
+check(MapReportFiles.latestTiming(in:[cache,saved])?.resolvingSymlinksInPath().path==next.resolvingSymlinksInPath().path,"corrupt newer files do not hide a valid record")
 try FileManager.default.removeItem(at:next)
-check(MapReportFiles.latestTiming(in:[cache,saved])==old,"Build7 cache records survive a source update/relaunch")
+check(MapReportFiles.latestTiming(in:[cache,saved])?.resolvingSymlinksInPath().path==old.resolvingSymlinksInPath().path,"Build7 cache records survive a source update/relaunch")
 for invalid in [[],[root],[root.appendingPathComponent("missing.json")],[URL(string:"https://example.com/report.json")!]] as [[URL]] {
     do {_ = try MapExportRequest(files:invalid,destination:.share);fatalError("invalid file opened a blank export sheet")}catch{}
 }

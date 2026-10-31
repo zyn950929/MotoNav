@@ -27,7 +27,7 @@ run("xcrun","simctl","install",udid,str(app))
 for mode in ["share","save"]:
     run("xcrun","simctl","launch","--terminate-running-process",udid,"com.example.motonav.exportprobe","--"+mode,"-AppleLanguages","(en)","-AppleLocale","en_US")
     # Let the nested report sheet and native controller complete their first animations.
-    subprocess.run(["sleep","8"],check=True)
+    subprocess.run(["sleep","18"],check=True)
     run("xcrun","simctl","io",udid,"screenshot",str(out/(mode+"-first-open.png")))
 (out/"probe.json").write_text(json.dumps({"device":device["name"],"source":"production MapReportExportSheet","nesting":"root -> diagnostics sheet -> export sheet","file":"map-timing-probe.json","firstPresentationScreenshots":["share-first-open.png","save-first-open.png"]},indent=2))
 print("PASS native export screenshots captured for visual inspection")

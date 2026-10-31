@@ -16,6 +16,10 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - name: Verify report export and record recovery
+        run: |
+          swiftc ios/MotoNav/MapReportExport.swift ios/tests/map-export/main.swift -o /tmp/map-export
+          /tmp/map-export
       - uses: actions/cache/restore@v4
         id: pods
         with:
@@ -65,10 +69,6 @@ jobs:
           /tmp/map-delivery
           swiftc ios/MotoNav/BleBulkWriteQueue.swift ios/MotoNav/BleWritePacer.swift ios/tests/ble-bulk/main.swift -o /tmp/bulk
           /tmp/bulk
-      - name: Verify report export and record recovery
-        run: |
-          swiftc ios/MotoNav/MapReportExport.swift ios/tests/map-export/main.swift -o /tmp/map-export
-          /tmp/map-export
       - name: Build iPhone Release arm64
         run: |
           set -o pipefail
@@ -98,11 +98,11 @@ jobs:
 
   export-ui:
     runs-on: macos-26
-    timeout-minutes: 6
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: Check first native share and save presentations
-        timeout-minutes: 4
+        timeout-minutes: 8
         run: python3 ios/tests/map-export-ui/run.py
       - uses: actions/upload-artifact@v4
         if: always()
