@@ -36,6 +36,21 @@ enum RasterPacket {
         guard b.count >= 16 else { return false }
         return valid(data, frame: u16(b, 0), x: i32(b, 2), y: i32(b, 6))
     }
+    /// Check RLE runs without expanding a 1.44M-pixel frame on the main thread.
+    static func hasMapContent(_ data:Data)->Bool {
+        guard valid(data) else{return false}
+        let b=[UInt8](data)
+        if u16(b,14)&0x8000 != 0{return true}
+        var p=16,materials=0
+        let minimum=MapGeo.minMaterialPixels(w:size,h:size)
+        while p<b.count {
+            let v=b[p];p+=1
+            var count=Int(v>>4)+1
+            if v>>4==15 {count+=Int(b[p]);p+=1}
+            if v&15 != 0 {materials+=count;if materials>=minimum{return true}}
+        }
+        return false
+    }
     static func forLegacy(_ data: Data) -> Data {
         guard isBuilding(data), valid(data) else { return data }
         var b = [UInt8](data); b[14] = UInt8(2000 & 255); b[15] = UInt8(2000 >> 8)

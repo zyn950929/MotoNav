@@ -57,12 +57,10 @@ enum AmapSdkRaster {
             guard RasterPacket.valid(packet) else { throw MapProcessingError.invalid("黑白道路数据无效") }
             onBaseReady?(packet); return RasterResult(bytes: packet, tiles: 1, fromCache: 0)
         }
-        var colors: [UInt32: UInt8] = [:]
-        let classified = raw.map { c -> UInt8 in
-            if let value = colors[c] { return value }
-            let value = MapGeo.classifyPixel(c, 248); colors[c] = value; return value
+        let roads=MapGeo.classifyAmapBase(raw,w:n,h:n)
+        guard MapGeo.materialPixelCount(roads)>=MapGeo.minMaterialPixels(w:n,h:n) else {
+            throw MapProcessingError.invalid("底图尚未准备完整，保留已有地图")
         }
-        let roads = MapGeo.dilateRoads(MapGeo.cleanRaster(classified, w: n, h: n), w: n, h: n)
         try check()
         let base = MapGeo.encodeRaster(frameId: f.id, x0: x, y0: y, w: n, h: n, mmPerPx: 2000, idx: roads)
         guard RasterPacket.valid(base) else { throw MapProcessingError.invalid("高德普通底图编码不完整") }

@@ -82,29 +82,17 @@ final class RideRecorder: ObservableObject {
     }
 }
 
-struct RideHistoryView: View {
-    @ObservedObject var recorder = RideRecorder.shared
-    @State private var exportURL: URL?
-    var body: some View {
+struct RideHistoryView:View {
+    @ObservedObject var recorder=RideRecorder.shared
+    var body:some View {
         List {
-            if let ride = recorder.active { Text("记录中 · \(ride.mode) · \(Int(ride.meters)) 米") }
-            if !recorder.error.isEmpty { Text(recorder.error).foregroundColor(.red) }
-            ForEach(recorder.rides) { ride in
-                VStack(alignment: .leading) {
-                    Text(ride.started, style: .date)
-                    Text("\(ride.mode) · \(NaviBridge.distText(Int(ride.meters))) · \(ride.fixes.count) 个轨迹点")
-                    HStack {
-                        Button("导出 GPX") { do { exportURL = try recorder.export(ride) } catch { recorder.error = error.localizedDescription } }
-                        Spacer()
-                        Button("删除", role: .destructive) { recorder.remove(ride) }
-                    }.buttonStyle(.borderless)
-                }
+            if let active=recorder.active {Text("记录中 · \(active.mode) · \(Int(active.meters)) 米")}
+            if !recorder.error.isEmpty {Text(ContentView.userMessage(recorder.error)).foregroundColor(AppTheme.red)}
+            ForEach(recorder.rides){ride in
+                NavigationLink(destination:RideDetailView(ride:ride)){RideListRow(ride:ride)}
             }
-            if recorder.rides.isEmpty && recorder.active == nil { Text("真实导航或巡航开始时自动记录；模拟导航不记录。") }
-        }.navigationTitle("骑行轨迹")
-        .sheet(isPresented: Binding(get: { exportURL != nil }, set: { if !$0 { exportURL = nil } })) {
-            if let url = exportURL { ExportSheet(url: url) }
-        }
+            if recorder.rides.isEmpty && recorder.active == nil {Text("真实导航或巡航开始时自动记录；模拟导航不记录。")}
+        }.navigationTitle("导航轨迹")
     }
 }
 struct ExportSheet: UIViewControllerRepresentable {

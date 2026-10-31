@@ -142,7 +142,7 @@ struct NaviScreen: View {
         Button(action: action) {
             Label(title, systemImage: icon)
                 .font(.subheadline.bold())
-                .foregroundColor(on ? Color(red: 1, green: 0.31, blue: 0.71) : .white)
+                .foregroundColor(on ? AppTheme.accent : .white)
                 .padding(.horizontal, 14).padding(.vertical, 9)
                 .background(Capsule().fill(Color.black.opacity(0.82)))
         }
@@ -154,7 +154,7 @@ struct NaviScreen: View {
         ZStack(alignment: .leading) {
             Capsule().fill(Color(red: 0.45, green: 0.14, blue: 0.32))
             GeometryReader { g in
-                Capsule().fill(Color(red: 1, green: 0.31, blue: 0.71))
+                Capsule().fill(AppTheme.accent)
                     .frame(width: holding ? g.size.width : 0)
                     .animation(holding ? .linear(duration: 0.6) : .easeOut(duration: 0.15), value: holding)
             }
@@ -181,8 +181,8 @@ struct NaviScreen: View {
     /// 到达目的地：显示 4 秒后自动关掉（点一下马上关）
     private var arrivedCard: some View {
         VStack(spacing: 8) {
-            Image(systemName: "flag.checkered").font(.system(size: 40, weight: .bold)).foregroundColor(Color(red: 1, green: 0.31, blue: 0.71))
-            Text(navi.info).font(.title2.bold()).foregroundColor(.white)
+            Image(systemName: "flag.checkered").font(.system(size: 40, weight: .bold)).foregroundColor(AppTheme.accent)
+            Text("已到达目的地").font(.title2.bold()).foregroundColor(.white)
             Text("马上回到主界面").font(.footnote).foregroundColor(.gray)
         }
         .padding(28)

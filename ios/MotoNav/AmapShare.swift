@@ -13,7 +13,7 @@ import Foundation
 /// 注意：第 2 步用的是高德网页内部接口，不是公开接口，高德改了就会失效（到时候要跟着改）；仅供个人使用。
 /// 这里的网络函数都是同步的，只在后台队列里调用。
 enum AmapShare {
-    private static let UA = "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
+    static let UA = "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36"
     static let MAX_WAYPOINTS = 15               // 高德 SDK 最多 16 个途经点，留一个余量
 
     typealias LL = (lat: Double, lng: Double)
@@ -72,7 +72,15 @@ enum AmapShare {
     }
 
     /// 读出分享的路线；失败时抛出带中文说明的错误
-    static func load(_ text: String) throws -> Route {
+    static func load(_ text: String,cookies:[HTTPCookie]=[],receiveCookies:(([HTTPCookie])->Void)?=nil) throws -> Route {
+        let previous=Thread.current.threadDictionary[ShareHTTPContext.threadKey]
+        let context=ShareHTTPContext(cookies:cookies)
+        Thread.current.threadDictionary[ShareHTTPContext.threadKey]=context
+        defer {
+            receiveCookies?(context.snapshot())
+            if let previous=previous{Thread.current.threadDictionary[ShareHTTPContext.threadKey]=previous}
+            else{Thread.current.threadDictionary.removeObject(forKey:ShareHTTPContext.threadKey)}
+        }
         guard let url = findUrl(text) else { throw Fail("没找到高德的分享链接") }
         guard let p = try resolve(url) else {
             throw Fail("链接里没找到路线信息（可能不是路线分享，或者链接已过期）\n最后打开的是：\(lastUrl.prefix(300))")
@@ -278,32 +286,37 @@ enum AmapShare {
     }
 
     /// 不自动跟随跳转（要自己一步步看跳到了哪里）
-    private final class NoRedirect: NSObject, URLSessionTaskDelegate {
-        func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                        newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) { completionHandler(nil) }
-    }
-    private static let noRedirect = URLSession(configuration: .default, delegate: NoRedirect(), delegateQueue: nil)
-
-    /// 读一个网址：返回 (跳转地址, 网页内容)
+    /// Isolated cookie jar for this import; redirects cannot send an AMap login to another domain.
     private static func get(_ url: String, follow: Bool = true) throws -> (loc: String?, body: String) {
-        // 高德跳转时可能给 http:// 的地址：统一换成 https（高德的网站都支持）
-        let u = url.hasPrefix("http://") ? "https://" + url.dropFirst(7) : url
-        guard let target = URL(string: u), target.scheme?.hasPrefix("http") == true else { throw Fail("打不开这个网址：\(u.prefix(80))") }
-        var req = URLRequest(url: target, timeoutInterval: 15)
-        req.setValue(UA, forHTTPHeaderField: "User-Agent")
-        req.setValue("zh-CN,zh;q=0.9", forHTTPHeaderField: "Accept-Language")
-        let sem = DispatchSemaphore(value: 0)
-        var data: Data?, resp: HTTPURLResponse?, err: Error?
-        (follow ? URLSession.shared : noRedirect).dataTask(with: req) { d, r, e in
-            data = d; resp = r as? HTTPURLResponse; err = e
-            sem.signal()
-        }.resume()
-        sem.wait()
-        if let e = err { throw Fail("网络请求失败：\(e.localizedDescription)") }
-        let code = resp?.statusCode ?? 0
-        if !follow && (300...399).contains(code) { return (resp?.value(forHTTPHeaderField: "Location"), "") }
-        if code >= 400 { throw Fail("网络请求失败（\(code)）") }
-        return (nil, String(data: data ?? Data(), encoding: .utf8) ?? "")
+        let u=url.hasPrefix("http://") ? "https://"+url.dropFirst(7):url
+        guard let target=URL(string:u),ShareCookiePolicy.allowed(target) else{throw Fail("分享地址不是有效的高德 HTTPS 页面")}
+        let context=(Thread.current.threadDictionary[ShareHTTPContext.threadKey] as? ShareHTTPContext) ?? ShareHTTPContext(cookies:[])
+        var req=URLRequest(url:target,timeoutInterval:20)
+        req.setValue(UA,forHTTPHeaderField:"User-Agent");req.setValue("zh-CN,zh;q=0.9",forHTTPHeaderField:"Accept-Language")
+        req.setValue("https://www.amap.com/",forHTTPHeaderField:"Referer")
+        req.setValue(ShareCookiePolicy.header(context.snapshot(),url:target),forHTTPHeaderField:"Cookie")
+        let configuration=URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage=nil;configuration.httpShouldSetCookies=false
+        let delegate=ShareRedirectDelegate(follow:follow,context:context)
+        let session=URLSession(configuration:configuration,delegate:delegate,delegateQueue:nil)
+        defer{session.finishTasksAndInvalidate()}
+        let sem=DispatchSemaphore(value:0)
+        var data:Data?,response:HTTPURLResponse?,failure:Error?
+        let task=session.dataTask(with:req){bytes,resp,error in
+            data=bytes;response=resp as? HTTPURLResponse;failure=error;sem.signal()
+        }
+        task.resume()
+        if sem.wait(timeout:.now()+25) == .timedOut{task.cancel();throw Fail("读取分享路线超时，请检查网络后重试")}
+        if let failure=failure{throw Fail("网络请求失败：\(failure.localizedDescription)")}
+        guard let resp=response else{throw Fail("高德没有返回有效响应")}
+        if let responseURL=resp.url{context.store(response:resp,url:responseURL)}
+        if !follow,(300...399).contains(resp.statusCode){return(resp.value(forHTTPHeaderField:"Location"),"")}
+        if [401,403].contains(resp.statusCode){throw Fail("高德要求网页登录或验证，请点“网页验证后重试”")}
+        guard resp.statusCode<400 else{throw Fail("网络请求失败（\(resp.statusCode)）")}
+        guard let bytes=data,bytes.count<=16*1024*1024 else{throw Fail("分享路线数据过大或为空")}
+        let body=String(data:bytes,encoding:.utf8) ?? ""
+        if body.contains("安全验证") || body.contains("滑动验证") || body.contains("访问验证"){throw Fail("高德要求网页验证，请点“网页验证后重试”")}
+        return(nil,body)
     }
 
     private static func dedup(_ l: [LL]) -> [LL] {
@@ -449,6 +462,56 @@ enum AmapShare {
 ///   这样不会被拽回去补走已经跳过的途经点，而是就近回到原路线继续走
 /// - 原路线发给圆屏画成细线（MapFeeder.setGhost）
 /// 只在主线程里用。
+/// Cookie scope is checked for every redirect, including path, expiry and secure transport.
+enum ShareCookiePolicy {
+    static func allowed(_ url:URL)->Bool {
+        guard url.scheme?.lowercased()=="https",url.user==nil,url.password==nil,let host=url.host?.lowercased() else{return false}
+        return host=="amap.com" || host.hasSuffix(".amap.com")
+    }
+    static func header(_ cookies:[HTTPCookie],url:URL)->String? {
+        guard allowed(url),let host=url.host?.lowercased() else{return nil}
+        let path=url.path.isEmpty ? "/":url.path
+        let usable=cookies.filter{cookie in
+            let domain=cookie.domain.lowercased().trimmingCharacters(in:CharacterSet(charactersIn:"."))
+            let domainOK=host==domain || (cookie.domain.hasPrefix(".") && host.hasSuffix("."+domain))
+            let base=cookie.path.isEmpty ? "/":cookie.path
+            let pathOK=path==base || (path.hasPrefix(base) && (base.hasSuffix("/") || path.dropFirst(base.count).hasPrefix("/")))
+            return domainOK && pathOK && (cookie.expiresDate == nil || cookie.expiresDate!>Date())
+        }.sorted{$0.path.count>$1.path.count}
+        guard !usable.isEmpty else{return nil}
+        return usable.map{"\($0.name)=\($0.value)"}.joined(separator:"; ")
+    }
+}
+
+private final class ShareHTTPContext:NSObject {
+    static let threadKey="motonav.share.http.context"
+    private var cookies:[HTTPCookie]
+    private let lock=NSLock()
+    init(cookies:[HTTPCookie]){self.cookies=cookies}
+    func snapshot()->[HTTPCookie]{lock.lock();defer{lock.unlock()};return cookies}
+    func store(response:HTTPURLResponse,url:URL){
+        guard ShareCookiePolicy.allowed(url),let host=url.host else{return}
+        let fields=response.allHeaderFields.reduce(into:[String:String]()){$0[String(describing:$1.key)]=String(describing:$1.value)}
+        let incoming=HTTPCookie.cookies(withResponseHeaderFields:fields,for:url).filter{cookie in
+            let domain=cookie.domain.trimmingCharacters(in:CharacterSet(charactersIn:"."))
+            return host==domain || (cookie.domain.hasPrefix(".") && host.hasSuffix("."+domain))
+        }
+        lock.lock();defer{lock.unlock()}
+        for cookie in incoming{cookies.removeAll{$0.name==cookie.name && $0.domain==cookie.domain && $0.path==cookie.path};cookies.append(cookie)}
+    }
+}
+
+private final class ShareRedirectDelegate:NSObject,URLSessionTaskDelegate {
+    let follow:Bool;let context:ShareHTTPContext
+    init(follow:Bool,context:ShareHTTPContext){self.follow=follow;self.context=context}
+    func urlSession(_ session:URLSession,task:URLSessionTask,willPerformHTTPRedirection response:HTTPURLResponse,newRequest request:URLRequest,completionHandler:@escaping(URLRequest?)->Void){
+        if let url=response.url{context.store(response:response,url:url)}
+        guard follow,let url=request.url,ShareCookiePolicy.allowed(url) else{completionHandler(nil);return}
+        var next=request;next.setValue(ShareCookiePolicy.header(context.snapshot(),url:url),forHTTPHeaderField:"Cookie")
+        completionHandler(next)
+    }
+}
+
 final class ShareGuide {
     static let shared = ShareGuide()
     private(set) var route: AmapShare.Route?

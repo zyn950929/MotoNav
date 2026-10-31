@@ -18,6 +18,10 @@ final class Weather: ObservableObject {
     private var images: [(Int, TextImage.Img?)] = []
     private let geocoder = CLGeocoder()
 
+    var displaySummary:String {
+        if info.contains("失败") || info.contains("HTTP") || info.contains("Error") || info.contains("无效") { return "天气暂未更新，请检查配置或稍后重试" }
+        return String(info.split(separator:"；",maxSplits:1).first ?? "")
+    }
     func save(host: String, key: String) throws {
         let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "https://", with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
@@ -122,7 +126,17 @@ final class Weather: ObservableObject {
         }
         var sources = ["和风天气 QWeather · https://www.qweather.com/", "https://developer.qweather.com/attribution.html"]
         for item in r { sources += dict(item?["metadata"])["attributions"] as? [String] ?? [] }
-        detail = (["\(place) · \(text) \(Int(temp.rounded()))°", windText, rain, air] + alerts.map { [ $0["headline"], $0["description"], $0["instruction"] ].compactMap { $0 as? String }.joined(separator: "\n") } + [title] + allNotes + Array(Set(sources)).sorted() + ["预警可能延迟，请以官方最新发布为准。更新：\(f.string(from: Date()))"]).joined(separator: "\n\n")
+        var detailParts:[String] = ["\(place) · \(text) \(Int(temp.rounded()))°", windText, rain, air]
+        let warningDetails:[String] = alerts.map { alert in
+            let fields:[String] = [alert["headline"],alert["description"],alert["instruction"]].compactMap{$0 as? String}
+            return fields.joined(separator:"\n")
+        }
+        detailParts.append(contentsOf:warningDetails)
+        detailParts.append(title)
+        detailParts.append(contentsOf:allNotes)
+        detailParts.append(contentsOf:Array(Set(sources)).sorted())
+        detailParts.append("预警可能延迟，请以官方最新发布为准。更新：\(f.string(from: Date()))")
+        detail = detailParts.joined(separator:"\n\n")
         info = "\(place) \(text) \(Int(temp.rounded()))°；逐小时 \(hours.count) 个" + (allNotes.isEmpty ? "" : "；" + allNotes.joined(separator: "；"))
         lastAt = Date(); push()
     }
@@ -182,8 +196,7 @@ struct WeatherSettingsView: View {
             }
             if !error.isEmpty { Text(error).foregroundColor(.orange) }
             Button("刷新天气") { weather.request(force: true) }
-            Text(weather.info).font(.caption)
-            Text(weather.detail).font(.caption).textSelection(.enabled)
+            Text(weather.displaySummary).font(.caption)
             Link("和风天气来源说明", destination: URL(string: "https://developer.qweather.com/attribution.html")!)
         }.tint(ContentView.cyan)
     }

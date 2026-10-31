@@ -7,6 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		89775CCDB79F2856E5A7E09E /* AmapWebSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC592C6FB4D8E48C651C4116; };
+		4BF4E115BA533B657E2FB1F6 /* RouteWaypointEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E52D24621872459750C15D4; };
+		68F4F866272A2D0FA9BA30D6 /* MotorPlanHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A87CF4D666969ADC7323996; };
+		504FC21197979CFC1DC66A01 /* PhoneClockSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48D0B1D2E520C53C7B02F7BB; };
 		3B8784BF43A12D42870A243A /* MotorRouteTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9154BD7E2FA8E8CAF5D39F2; };
 		38D21F5077445F183E9FE1B2 /* BleHandshakeClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DC453D7088A6379C98DCD3B; };
 		6858BB9A033F1A212B9C5A4B /* WebRouteMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39875FF77DBF047AA1EBA757; };
@@ -56,6 +60,13 @@
 		DB621FCC696122DC6BCCCDCA /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6560E51B1DBC15500A124007 /* ShareViewController.swift */; };
 		F336897359EC15D9BD17B152 /* CruiseIdleTimer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88F6F7FEE25CC563EEC49A1F /* CruiseIdleTimer.swift */; };
 		FB6E59E7B7F70EACF4129EE5 /* RasterProcessing.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE47CC0D351EABDC9EEE6D04 /* RasterProcessing.swift */; };
+		5F7F5314C01A0D2CD404D52C /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78D5BA9B14F846A2B253F95 /* AppTheme.swift */; };
+		380AD0068E5E47B069135751 /* DeviceHomeViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 502EE4065B8CA4B9A282ECD6 /* DeviceHomeViews.swift */; };
+		AA40B185939A8173C207C6CD /* ConnectAnimationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FDDE4F4022D665062883D21 /* ConnectAnimationCoordinator.swift */; };
+		11F49329EB351078DD22D354 /* ConnectSheetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC70F5D847C7A4B68D305DB6 /* ConnectSheetView.swift */; };
+		FFF967D50529ED5C2DB09292 /* ConnectPuckSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92CE5A9CBDA26491AF34B348 /* ConnectPuckSceneView.swift */; };
+		B488433BA6139B36367854A9 /* SettingsMenus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FB7FA60139401C9038B5D91 /* SettingsMenus.swift */; };
+		D9F321092230F1FC8B8B23D7 /* RideMapViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEE46421D846391ABEC6699A /* RideMapViews.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -83,6 +94,10 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		FC592C6FB4D8E48C651C4116 /* AmapWebSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmapWebSession.swift; sourceTree = "<group>"; };
+		9E52D24621872459750C15D4 /* RouteWaypointEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteWaypointEditor.swift; sourceTree = "<group>"; };
+		9A87CF4D666969ADC7323996 /* MotorPlanHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotorPlanHistory.swift; sourceTree = "<group>"; };
+		48D0B1D2E520C53C7B02F7BB /* PhoneClockSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneClockSync.swift; sourceTree = "<group>"; };
 		F9154BD7E2FA8E8CAF5D39F2 /* MotorRouteTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotorRouteTracker.swift; sourceTree = "<group>"; };
 		7DC453D7088A6379C98DCD3B /* BleHandshakeClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleHandshakeClock.swift; sourceTree = "<group>"; };
 		39875FF77DBF047AA1EBA757 /* WebRouteMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRouteMetadata.swift; sourceTree = "<group>"; };
@@ -138,6 +153,13 @@
 		DE44A165E6289D60C1AAA464 /* KeySetupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeySetupView.swift; sourceTree = "<group>"; };
 		EE31CD52BB437EC6897ED9AD /* Pods-MotoNav.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MotoNav.release.xcconfig"; path = "Target Support Files/Pods-MotoNav/Pods-MotoNav.release.xcconfig"; sourceTree = "<group>"; };
 		FB643DCAF97E834DC966F034 /* AmapCaptureHost.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AmapCaptureHost.swift; sourceTree = "<group>"; };
+		F78D5BA9B14F846A2B253F95 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		502EE4065B8CA4B9A282ECD6 /* DeviceHomeViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceHomeViews.swift; sourceTree = "<group>"; };
+		4FDDE4F4022D665062883D21 /* ConnectAnimationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectAnimationCoordinator.swift; sourceTree = "<group>"; };
+		FC70F5D847C7A4B68D305DB6 /* ConnectSheetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectSheetView.swift; sourceTree = "<group>"; };
+		92CE5A9CBDA26491AF34B348 /* ConnectPuckSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectPuckSceneView.swift; sourceTree = "<group>"; };
+		0FB7FA60139401C9038B5D91 /* SettingsMenus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsMenus.swift; sourceTree = "<group>"; };
+		EEE46421D846391ABEC6699A /* RideMapViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideMapViews.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -199,6 +221,17 @@
 		B99DD224F5F136EEECD25C17 /* MotoNav */ = {
 			isa = PBXGroup;
 			children = (
+				EEE46421D846391ABEC6699A /* RideMapViews.swift */,
+				0FB7FA60139401C9038B5D91 /* SettingsMenus.swift */,
+				92CE5A9CBDA26491AF34B348 /* ConnectPuckSceneView.swift */,
+				FC70F5D847C7A4B68D305DB6 /* ConnectSheetView.swift */,
+				4FDDE4F4022D665062883D21 /* ConnectAnimationCoordinator.swift */,
+				502EE4065B8CA4B9A282ECD6 /* DeviceHomeViews.swift */,
+				F78D5BA9B14F846A2B253F95 /* AppTheme.swift */,
+				FC592C6FB4D8E48C651C4116 /* AmapWebSession.swift */,
+				9E52D24621872459750C15D4 /* RouteWaypointEditor.swift */,
+				9A87CF4D666969ADC7323996 /* MotorPlanHistory.swift */,
+				48D0B1D2E520C53C7B02F7BB /* PhoneClockSync.swift */,
 				78E8A2064569BFBA9955CD8C /* Config.swift */,
 				971EA77C65E2C989914BC80A /* WebMotor.swift */,
 				F9154BD7E2FA8E8CAF5D39F2 /* MotorRouteTracker.swift */,
@@ -416,6 +449,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D9F321092230F1FC8B8B23D7 /* RideMapViews.swift in Sources */,
+				B488433BA6139B36367854A9 /* SettingsMenus.swift in Sources */,
+				FFF967D50529ED5C2DB09292 /* ConnectPuckSceneView.swift in Sources */,
+				11F49329EB351078DD22D354 /* ConnectSheetView.swift in Sources */,
+				AA40B185939A8173C207C6CD /* ConnectAnimationCoordinator.swift in Sources */,
+				380AD0068E5E47B069135751 /* DeviceHomeViews.swift in Sources */,
+				5F7F5314C01A0D2CD404D52C /* AppTheme.swift in Sources */,
+				504FC21197979CFC1DC66A01 /* PhoneClockSync.swift in Sources */,
+				68F4F866272A2D0FA9BA30D6 /* MotorPlanHistory.swift in Sources */,
+				4BF4E115BA533B657E2FB1F6 /* RouteWaypointEditor.swift in Sources */,
+				89775CCDB79F2856E5A7E09E /* AmapWebSession.swift in Sources */,
 				CE38FAAF34CBBFAD84451088 /* Config.swift in Sources */,
 				637279724CB8969F644B3AC5 /* WebMotor.swift in Sources */,
 				3B8784BF43A12D42870A243A /* MotorRouteTracker.swift in Sources */,
@@ -493,7 +537,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.15.0;
+				MARKETING_VERSION = 0.16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.motonav;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -576,7 +620,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.15.0;
+				MARKETING_VERSION = 0.16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.motonav.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -601,7 +645,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 0.15.0;
+				MARKETING_VERSION = 0.16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.motonav.share;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -629,7 +673,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.15.0;
+				MARKETING_VERSION = 0.16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.example.motonav;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

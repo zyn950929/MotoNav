@@ -1,5 +1,6 @@
 import Foundation
 import CoreBluetooth
+import UIKit
 
 /// 版本：跟随 App 版本（见 Config.swift 的 APP_VERSION）
 ///
@@ -19,6 +20,13 @@ final class BleLink: NSObject, ObservableObject {
     private let BULK_HEADER = 15
 
     @Published var status = "未连接"
+    struct ScreenChoice:Identifiable { let id:UUID;let name:String }
+    @Published private(set) var screenName=""
+    @Published private(set) var screenBattery:Int?
+    @Published private(set) var screenCharging=false
+    @Published private(set) var availableScreens:[ScreenChoice]=[]
+    private var screenChoices:[UUID:CBPeripheral]=[:]
+    private var choosingScreen=false
     @Published private(set) var mediaLyricsSupported = false
     @Published private(set) var mediaLyricsActive = false
     @Published private(set) var mediaAMSControls = 0
@@ -27,7 +35,7 @@ final class BleLink: NSObject, ObservableObject {
     @Published private(set) var mediaHIDSupported = false
     @Published private(set) var mediaHIDReady = false
     @Published private(set) var mediaHIDMode = false
-    private var verified = false
+    @Published private(set) var verified = false
     private var buildingProbe = BleCapabilityProbe()
     private var buildingQueries: Int { buildingProbe.attempts }
     private var txNotifyReady = false
@@ -61,6 +69,8 @@ final class BleLink: NSObject, ObservableObject {
     private var stateOrder: [String] = []
     private var lastImg: [Int: (w: Int, h: Int, data: Data)] = [:]
     private var imgId = [Int](repeating: 0, count: 13)
+    private var phoneClock=PhoneClockSync()
+    private var clockObserver:NSObjectProtocol?
     private var heartbeat: Timer?
     private var lastWriteAt = Date.distantPast
     private var writePacer = BleWritePacer()
@@ -73,7 +83,9 @@ final class BleLink: NSObject, ObservableObject {
         super.init()
         central = CBCentralManager(delegate: self, queue: .main,
                                    options: [CBCentralManagerOptionRestoreIdentifierKey: "motonav.central"])
+        clockObserver=NotificationCenter.default.addObserver(forName:UIApplication.significantTimeChangeNotification,object:nil,queue:.main){[weak self] _ in self?.syncPhoneClock(force:true)}
         heartbeat = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            self?.syncPhoneClock()
             self?.checkConnectionSetup()
             self?.requestBuildingCapability()
             MusicBridge.shared.syncLyrics()
@@ -83,7 +95,52 @@ final class BleLink: NSObject, ObservableObject {
         }
     }
 
+    var connectionSummary:String {
+        if isReady {
+            if !verified { return "请按圆屏提示完成配对" }
+            let name=screenName.isEmpty ? "圆屏":screenName
+            return name+" 已连接"+(screenBattery.map{" · \($0)%"+(screenCharging ? " 充电中":"")} ?? "")
+        }
+        if status.contains("权限") { return "请在 iPhone 设置中允许蓝牙访问" }
+        if status.contains("没打开") { return "请打开 iPhone 蓝牙" }
+        if status.contains("搜索") { return "正在搜索圆屏…" }
+        if status.contains("连接") && !status.contains("未连接") { return "正在连接圆屏…" }
+        if status.contains("不可用") || status.contains("找不到") { return "圆屏暂不可用，请检查电源后重试" }
+        return "圆屏未连接"
+    }
+
     // MARK: - 连接
+
+    func beginScreenSelection() {
+        choosingScreen=true;availableScreens=[];screenChoices=[:]
+        if let p=peripheral {addScreenChoice(p)}
+        guard central.state == .poweredOn else{return}
+        central.scanForPeripherals(withServices:[serviceUUID],options:nil)
+    }
+    func endScreenSelection() {
+        guard choosingScreen else{return}
+        choosingScreen=false;central.stopScan()
+        if wantConnected && (peripheral == nil || peripheral?.state == .disconnected) {connect()}
+    }
+    private func addScreenChoice(_ p:CBPeripheral) {
+        screenChoices[p.identifier]=p
+        if !availableScreens.contains(where:{$0.id==p.identifier}) {
+            availableScreens.append(ScreenChoice(id:p.identifier,name:p.name ?? "MotoNav 圆屏"))
+        }
+    }
+    func selectScreen(_ id:UUID) {
+        guard central.state == .poweredOn,let chosen=screenChoices[id] else{return}
+        choosingScreen=false;central.stopScan()
+        if peripheral === chosen,chosen.state == .connected {return}
+        if let old=peripheral {central.cancelPeripheralConnection(old)}
+        peripheral=nil;wantConnected=true;connectionRetries=0;retryAfter=0
+        UserDefaults.standard.set(id.uuidString,forKey:"ble_peripheral")
+        attach(chosen)
+    }
+    func forgetOtherPhones() {
+        guard isReady,verified else{return}
+        sendOnce("#UNPAIR")
+    }
 
     func connect() {
         connectionRetries=0;retryAfter=0
@@ -114,6 +171,7 @@ final class BleLink: NSObject, ObservableObject {
 
     private func attach(_ p: CBPeripheral) {
         isReady = false; txNotifyReady = false
+        screenName=p.name ?? "MotoNav";screenBattery=nil;screenCharging=false
         buildingsSupported = false
         mediaHIDSupported = false; mediaHIDReady = false; mediaHIDMode = false; mediaLyricsSupported = false; mediaLyricsActive = false; mediaAMSControls = 0; verified = false; buildingProbe.reset()
         MusicBridge.shared.resetAMS()
@@ -143,7 +201,7 @@ final class BleLink: NSObject, ObservableObject {
     private func retryConnection(_ p:CBPeripheral) {
         let delay=max(0,retryAfter-ProcessInfo.processInfo.systemUptime)
         DispatchQueue.main.asyncAfter(deadline:.now()+delay){[weak self] in
-            guard let self=self,self.wantConnected,self.central.state == .poweredOn,self.peripheral === p,p.state == .disconnected else{return}
+            guard let self=self,self.wantConnected,!self.choosingScreen,self.central.state == .poweredOn,self.peripheral === p,p.state == .disconnected else{return}
             self.attach(p)
         }
     }
@@ -161,6 +219,13 @@ final class BleLink: NSObject, ObservableObject {
         return min(min(p.maximumWriteValueLength(for: .withoutResponse), response), MAX_WRITE)
     }
 
+    func syncPhoneClock(force:Bool=false) {
+        guard isReady,verified else{return}
+        let now=Date()
+        if let message=phoneClock.message(wall:now.timeIntervalSince1970,uptime:ProcessInfo.processInfo.systemUptime,
+            offset:TimeZone.current.secondsFromGMT(for:now),force:force){sendOnce(message)}
+    }
+
     // MARK: - 发送
 
     private func keyOf(_ msg: String) -> String {
@@ -171,6 +236,7 @@ final class BleLink: NSObject, ObservableObject {
 
     /// 发一条文字消息（同类型只留最新）
     func send(_ msg: String) {
+        if msg.hasPrefix("#TIME,"){sendOnce(msg);return}
         let k = keyOf(msg)
         if msg == "C" {                                 // 清屏：状态全部忘掉（亮度、风格、方向这些设置除外）
             let keep: Set<String> = ["#b", "#t", "#R", "#Q", "#n", "#m", "#r", "#w"]
@@ -368,6 +434,7 @@ final class BleLink: NSObject, ObservableObject {
         writePacer.reset()
         status = "已连接（数据包 \(maxWrite) 字节）"
         queue.removeAll()
+        phoneClock=PhoneClockSync()
         bulkQ.reset(); bulkBarrier.reset(); bulkWriteSerial += 1
         if let b = lastState["#b"] { enqueue("#b", Data(b.utf8)) }
         for k in stateOrder where k != "#b" { if let v = lastState[k] { enqueue(k, Data(v.utf8)) } }
@@ -403,6 +470,7 @@ extension BleLink: CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func centralManager(_ c: CBCentralManager, didDiscover p: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
+        if choosingScreen {addScreenChoice(p);return}
         guard wantConnected else{return}
         if let current=peripheral,current.state == .connected || current.state == .connecting {return}
         c.stopScan()
@@ -431,6 +499,7 @@ extension BleLink: CBCentralManagerDelegate, CBPeripheralDelegate {
 
     func centralManager(_ c: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) {
         guard p === peripheral else { return }
+        screenBattery=nil;screenCharging=false
         isReady = false
         bulkQ.reset(); bulkBarrier.reset(); bulkWriteSerial += 1
         buildingsSupported = false
@@ -490,7 +559,7 @@ extension BleLink: CBCentralManagerDelegate, CBPeripheralDelegate {
         guard let raw = String(data: d, encoding: .utf8) else { return }
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if s == "U,1", !verified {
-            verified = true; buildingProbe.reset(); requestBuildingCapability(); Settings.shared.pushAll(); MapFeeder.shared.resendAll(); return
+            verified = true; syncPhoneClock(force:true); buildingProbe.reset(); requestBuildingCapability(); Settings.shared.pushAll(); MapFeeder.shared.resendAll(); return
         }
         if s == "CAP,HID,1" {
             mediaHIDSupported = true
@@ -506,6 +575,11 @@ extension BleLink: CBCentralManagerDelegate, CBPeripheralDelegate {
             return
         }
         let parts = s.split(separator: ",").map(String.init)
+        if parts.first == "V",parts.count>=3 {
+            screenBattery=Int(parts[1]).flatMap{(0...100).contains($0) ? $0:nil}
+            screenCharging=parts[2]=="1"
+            return
+        }
         if parts.first == "ML", parts.count == 2, ["0", "1"].contains(parts[1]) {
             mediaLyricsActive = parts[1] == "1"
             MusicBridge.shared.lyricsReply(mediaLyricsActive); return

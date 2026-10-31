@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
 @main
 struct MotoNavApp: App {
+    @AppStorage("ui_appearance") private var appearance=0
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
@@ -55,7 +56,10 @@ struct MotoNavApp: App {
         WindowGroup {
             ContentView()
                 .background(AmapCaptureSurface().frame(width: 1, height: 1))
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(AppearanceMode(rawValue:appearance)?.scheme)
+                .onReceive(NotificationCenter.default.publisher(for:UIApplication.didBecomeActiveNotification)){_ in
+                    BleLink.shared.syncPhoneClock(force:true)
+                }
         }
     }
 }

@@ -17,6 +17,7 @@ final class RouteOfflineMaps {
     private let token = MapWorkToken()
     private var jobToken: MapWorkToken?
     private let foregroundBusy: () -> Bool
+    private let currentSpeed: () -> Int
     private let onReady: (RouteMapPlan.Node) -> Void
     private let onStatus: (String) -> Void
     private var ready: [Bool], baseReady: [Bool]
@@ -24,10 +25,10 @@ final class RouteOfflineMaps {
     private var retryAt = Date.distantPast
     private var timer: Timer?
     init(frame: MapGeo.Frame, plan: RouteMapPlan, source: Int, buildings: Bool,
-         foregroundBusy: @escaping () -> Bool, onReady: @escaping (RouteMapPlan.Node) -> Void, onStatus: @escaping (String) -> Void) {
+         foregroundBusy: @escaping () -> Bool, currentSpeed:@escaping ()->Int = {0}, onReady: @escaping (RouteMapPlan.Node) -> Void, onStatus: @escaping (String) -> Void) {
         self.style = Settings.shared.theme
         self.frame = frame; self.plan = plan; self.source = source; self.buildings = buildings
-        self.foregroundBusy = foregroundBusy; self.onReady = onReady; self.onStatus = onStatus
+        self.foregroundBusy = foregroundBusy; self.currentSpeed=currentSpeed; self.onReady = onReady; self.onStatus = onStatus
         ready = [Bool](repeating: false, count: plan.nodes.count); baseReady = ready
     }
     func read(_ node: RouteMapPlan.Node) -> Data? {
@@ -66,9 +67,12 @@ final class RouteOfflineMaps {
         guard !foregroundBusy(), Date() >= retryAt else { return }
         let indexes = Array(target..<ready.count) + Array(0..<target)
         guard let i = indexes.first(where: { !baseReady[$0] }) ?? indexes.first(where: { !ready[$0] }) else { return }
+        let includeBuildings = buildings && baseCount == baseReady.count
+        guard !includeBuildings || MapCoveragePolicy.mayCaptureBuildings(kmh:currentSpeed()) else {
+            onStatus("沿线道路已准备，高速行驶时暂缓补充楼块");return
+        }
         busy = true
         let node = plan.nodes[i]
-        let includeBuildings = buildings && baseCount == baseReady.count
         onStatus("沿线离线地图：\(baseCount)/\(ready.count) 块可用，下载第 \(i + 1) 块\(includeBuildings ? "（补齐建筑）" : "（普通底图优先）")")
         let job = MapWorkToken(); jobToken = job
         worker.async {

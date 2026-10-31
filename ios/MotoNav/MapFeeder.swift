@@ -127,6 +127,7 @@ final class MapFeeder: ObservableObject {
             let plan = try RouteMapPlan(coords.map { (x: f.x($0.lng), y: f.y($0.lat)) })
             let maps = RouteOfflineMaps(frame: f, plan: plan, source: src, buildings: buildingMode,
                 foregroundBusy: { [weak self] in self?.fetching ?? true },
+                currentSpeed: { [weak self] in self?.pose?.kmh ?? 0 },
                 onReady: { [weak self] node in
                     guard let self = self, self.offlineKey == identity, self.enabled, !self.fetching else { return }
                     let progress = self.pose.map { plan.progress(x: $0.x, y: $0.y, previous: self.routeProgress) } ?? 0
@@ -183,7 +184,7 @@ final class MapFeeder: ObservableObject {
             MapPipelineTrace.event("movement-cancel", ["serial": requestSerial, "baseReady": fetchingBaseReady, "needsCoverage": needsCoverage, "nextBlock": changedNode, "kmh": kmh])
             workToken.cancel(); requestSerial += 1; fetching = false
         }
-        let retryBuildings = buildingMode && !chunkBuildingsComplete && UIApplication.shared.applicationState == .active && Date().timeIntervalSince(lastBuildingTry) >= 60
+        let retryBuildings = buildingMode && MapCoveragePolicy.mayCaptureBuildings(kmh:kmh) && !chunkBuildingsComplete && UIApplication.shared.applicationState == .active && Date().timeIntervalSince(lastBuildingTry) >= 60
         if !fetching && (!haveChunk || distance > refresh || needsCoverage || changedNode || (node == nil && prepareEarly) || retryBuildings) && Date().timeIntervalSince(lastFetchFail) > 15 {
             let a = bearing * .pi / 180, ahead = kmh > 5 ? (satMode ? SAT_AHEAD : MapCoveragePolicy.lookahead(kmh: kmh, preferred: AHEAD)) : 0
             fetchChunk(f, node?.x ?? (x + sin(a) * ahead), node?.y ?? (y + cos(a) * ahead), node: node)
@@ -195,6 +196,9 @@ final class MapFeeder: ObservableObject {
         if let p = pose, !sat, src == Self.SRC_AMAP,
            !MapCoveragePolicy.covers(x: p.x, y: p.y, cx: cx, cy: cy, kmh: p.kmh) {
             MapPipelineTrace.event("packet-outside-view", ["buildings": RasterPacket.isBuilding(b)]); return
+        }
+        guard src != Self.SRC_AMAP || Settings.shared.theme != 1 || RasterPacket.hasMapContent(b) else {
+            status="底图尚未准备完整，保留已有地图";return
         }
         let complete = RasterPacket.isBuilding(b)
         if haveChunk, chunkType == type, chunkSat == sat, abs(cx - chunkCx) < 1, abs(cy - chunkCy) < 1,
@@ -224,7 +228,7 @@ final class MapFeeder: ObservableObject {
         let serial = requestSerial
         MapPipelineTrace.event("fetch-start", ["serial": serial, "buildings": buildingMode, "source": Settings.shared.mapSource])
         workToken.cancel(); let token = MapWorkToken(); workToken = token
-        let src = Settings.shared.mapSource, sat = satMode, buildings = buildingMode, style = Settings.shared.theme
+        let src = Settings.shared.mapSource, sat = satMode, buildings = buildingMode && MapCoveragePolicy.mayCaptureBuildings(kmh:pose?.kmh ?? 0), style = Settings.shared.theme
         let half = HALF, satHalf = SAT_HALF, maps = offlineMaps
         // Cached packets can be read and sent even when iOS has suspended graphics rendering.
         if let node = node, let cached = maps?.read(node) {
@@ -426,3 +430,4 @@ enum MapPipelineTrace {
     }
     #endif
 }
+

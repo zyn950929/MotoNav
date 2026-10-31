@@ -357,9 +357,24 @@ enum MapGeo {
         if sat > 0.12 && hue >= 180 && hue <= 255 { return PX_WATER }
         if sat > 0.10 && hue >= 60 && hue <= 170 { return PX_PARK }
         if sat > 0.18 && hue >= 10 && hue <= 60 { return PX_ROAD }        // 黄色、橙色的主干道
-        if lum(c) >= bgLum + 6 { return PX_ROAD }                          // 比底色亮的白色道路
+        let l=lum(c)
+        if sat < 0.10, abs(l-bgLum)>=22,l>=110,l<=250 {return PX_ROAD}
+        if l >= bgLum + 6 { return PX_ROAD }                          // 比底色亮的白色道路
         return PX_BLOCK                                                    // 深色细线（楼块轮廓、图标、描边）不当道路
     }
+
+    /// AMap highway pavement may be gray; use the measured land colour.
+    static func classifyAmapBase(_ raw:[UInt32],w:Int,h:Int)->[UInt8] {
+        let bg=backgroundLum(raw)
+        var colors:[UInt32:UInt8]=[:]
+        let classified=raw.map{c -> UInt8 in
+            if let known=colors[c]{return known}
+            let value=classifyPixel(c,bg);colors[c]=value;return value
+        }
+        return dilateRoads(cleanRaster(classified,w:w,h:h),w:w,h:h)
+    }
+    static func minMaterialPixels(w:Int,h:Int)->Int {max(4,(w*h)/1250)}
+    static func materialPixelCount(_ pixels:[UInt8])->Int {pixels.reduce(0){$0+($1==0 ? 0:1)}}
 
     /// 清理杂点，让画面干净：
     /// 1. 去掉孤立的小块（小于 minSize 像素的道路 / 绿地 / 水面碎块，多半是图标、楼块、文字残留）；

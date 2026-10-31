@@ -2,6 +2,8 @@ import Foundation
 
 /// Match the round display's speed-dependent raster viewport (including its displaced arrow).
 enum MapCoveragePolicy {
+    /// Existing building packets remain usable; extra screenshot passes yield at highway speeds.
+    static func mayCaptureBuildings(kmh:Int)->Bool {kmh<60}
     static func radius(kmh: Int) -> Double {
         let scale = min(0.6, max(0.38, 0.85 - Double(max(0, kmh)) * 0.006))
         return 292 / scale
@@ -94,11 +96,14 @@ final class RouteMapCache {
         guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
               let size = attrs[.size] as? NSNumber, (17...480000).contains(size.intValue),
               let data = try? Data(contentsOf: url), RasterPacket.isBuilding(data) == buildings,
-              RasterPacket.valid(data, frame: frame.id, x: Int(node.x - 1200), y: Int(node.y + 1200)) else { return nil }
+              RasterPacket.valid(data, frame: frame.id, x: Int(node.x - 1200), y: Int(node.y + 1200)),
+              style != 1 || RasterPacket.hasMapContent(data) else { return nil }
         return data
     }
     func store(_ data: Data, frame: MapGeo.Frame, source: Int, node: RouteMapPlan.Node, style: Int = 1) throws {
-        guard RasterPacket.valid(data, frame: frame.id, x: Int(node.x - 1200), y: Int(node.y + 1200)) else { throw MapProcessingError.invalid("离线底图校验失败") }
+        guard RasterPacket.valid(data, frame: frame.id, x: Int(node.x - 1200), y: Int(node.y + 1200)),
+              style != 1 || RasterPacket.hasMapContent(data) else { throw MapProcessingError.invalid("离线底图校验失败") }
+        guard style != 1 || RasterPacket.hasMapContent(data) else {throw MapProcessingError.invalid("空白底图未写入缓存")}
         lock.lock(); defer { lock.unlock() }
         let file = file(frame: frame, source: source, buildings: RasterPacket.isBuilding(data), node: node, style: style)
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
