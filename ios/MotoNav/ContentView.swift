@@ -23,7 +23,7 @@ struct ContentView: View {
     @AppStorage("ui_tab_placement") private var tabPlacement=0
     @Environment(\.horizontalSizeClass) private var hSizeClass
     @State private var uiStarted=false
-    @State private var page = 0
+    @AppStorage("ui_selected_tab") private var page = 0
     @State private var showWebMotor = false
     @State private var independentMode: IndependentMode = .motorcycle
     @State private var showRides = false
@@ -92,7 +92,7 @@ struct ContentView: View {
             softenSegmentedChrome()
             if !uiStarted {
                 uiStarted=true
-                if !settings.keysMissing && !ble.isReady {connectAnim.connectAutomatically()}
+                if !settings.keysMissing && !ble.isReady && ble.bluetoothAvailable {connectAnim.connectAutomatically()}
             }                                    // iOS v0.7 打开 App 时，高德或高德 key 没填就提醒一次
             if !ContentView.keyPrompted && settings.keysMissing {
                 ContentView.keyPrompted = true

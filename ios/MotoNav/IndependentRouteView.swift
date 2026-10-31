@@ -195,7 +195,7 @@ struct IndependentNavigationView: View {
                 VStack(spacing:18){Text("已到达目的地").font(.title.bold());Button("返回首页"){guide.arrived=false;dismiss()}}
                     .padding(30).background(RoundedRectangle(cornerRadius:22).fill(ContentView.bg)).frame(maxHeight:.infinity)
             }
-        }.foregroundColor(.white).tint(ContentView.pink)
+        }.foregroundColor(AppTheme.text).tint(ContentView.pink)
         .alert("结束导航？",isPresented:$confirmExit){Button("结束",role:.destructive){guide.stop();guide.arrived=false;dismiss()};Button("继续导航",role:.cancel){}}
     }
     private var navigationNotice:String {

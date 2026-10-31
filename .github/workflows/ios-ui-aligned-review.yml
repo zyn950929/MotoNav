@@ -1,0 +1,45 @@
+name: iOS 0.16 aligned interface review
+on:
+  push:
+    branches: [codex/ios-016-ui-align-20261031]
+    paths: ['ios/**', '.github/workflows/ios-ui-aligned-review.yml', 'ui-review/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: motonav-ios-ui-review-build2
+  cancel-in-progress: true
+jobs:
+  review:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start simulator early
+        run: python3 ui-review/capture.py boot
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods/repos
+          key: ios-pods-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
+      - name: Install locked dependencies
+        working-directory: ios
+        timeout-minutes: 10
+        run: |
+          sudo gem install cocoapods -v 1.16.2 --no-document
+          pod _1.16.2_ install --deployment
+      - name: Build simulator for visual review
+        run: |
+          set -o pipefail
+          xcodebuild -workspace ios/MotoNav.xcworkspace -scheme MotoNav -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -configuration Debug -derivedDataPath "$RUNNER_TEMP/UIBuild" ARCHS=x86_64 CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= build | tee ui-build.log
+      - name: Capture four tabs and appearance modes
+        timeout-minutes: 6
+        run: python3 ui-review/capture.py capture
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MotoNav-iOS-0.16.0-UI-Build2-Review
+          path: |
+            ui-review-output/
+            ui-build.log

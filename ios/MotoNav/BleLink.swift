@@ -95,6 +95,8 @@ final class BleLink: NSObject, ObservableObject {
         }
     }
 
+    var bluetoothAvailable:Bool {central.state == .poweredOn}
+
     var connectionSummary:String {
         if isReady {
             if !verified { return "请按圆屏提示完成配对" }
