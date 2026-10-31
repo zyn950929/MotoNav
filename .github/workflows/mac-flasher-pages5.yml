@@ -1,0 +1,30 @@
+name: macOS pages.5 flasher check
+on:
+  push:
+    branches: [codex/macos-pages5-flasher-20261031]
+    paths: ['mac-flasher/**', '.github/workflows/mac-flasher-pages5.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: macos-pages5-flasher-check
+  cancel-in-progress: true
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-26, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native tool and isolated launcher flow checks
+        run: |
+          set -o pipefail
+          python3 mac-flasher/smoke.py | tee mac-flasher-check.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MotoNav-pages5-macOS-${{ matrix.runner }}
+          path: mac-flasher-check.log

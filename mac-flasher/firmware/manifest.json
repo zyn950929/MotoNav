@@ -1,0 +1,22 @@
+{
+  "firmware": "7.12.10-pages.5",
+  "platform": "universal",
+  "board": "Waveshare ESP32-S3-Touch-AMOLED-1.75",
+  "esp32Core": "3.3.10",
+  "flashSize": "16MB",
+  "partition": "app3M_fat9M_16MB",
+  "verifiedApplicationOffset": "0x10000",
+  "deviceTested": false,
+  "files": [
+    {
+      "file": "MotoNav_universal_1.75_v7.12.10-pages.5_panel0_app_0x10000.bin",
+      "bytes": 1289856,
+      "sha256": "67ba91b66de670893a8e3d21752579f5db25c148e88cd8c8f754d8f342afab8c"
+    },
+    {
+      "file": "MotoNav_universal_1.75_v7.12.10-pages.5_panel0_full_0x0.bin",
+      "bytes": 1355392,
+      "sha256": "b6364258e80545ac4459aeffe9479038a87b8318bc095f5e11fcca4a4c77636a"
+    }
+  ]
+}
