@@ -74,8 +74,8 @@ struct MapSampleReportView:View {
     @ObservedObject private var report=MapSampleReport.shared
     @ObservedObject private var trace=MapTraceReport.shared
     @Environment(\.dismiss) private var dismiss
-    @State private var sharing=false
-    @State private var shareItems:[URL]=[]
+    @State private var exportRequest:MapExportRequest?
+    @State private var exportError:String?
     var body:some View {
         NavigationView {
             ScrollView {
@@ -88,7 +88,10 @@ struct MapSampleReportView:View {
                         Button("停止记录"){trace.finish()}
                     } else {Button("开始记录地图衔接"){trace.begin()}.disabled(trace.exporting)}
                     Text(trace.status).font(.footnote).foregroundColor(AppTheme.sub)
-                    if !trace.files.isEmpty {Button("导出衔接记录"){shareItems=trace.files;sharing=true}}
+                    if !trace.files.isEmpty {
+                        Button("保存衔接记录到文件"){export(trace.files,to:.save)}
+                        Button("分享衔接记录"){export(trace.files,to:.share)}
+                    }
                     Divider()
                     Text("地图颜色与纹理").font(.headline)
                     Text("请在网纹出现的地图区域生成对照图。它们包含地图画面，不含 Key；不会自动上传。")
@@ -101,16 +104,19 @@ struct MapSampleReportView:View {
                             Image(uiImage:image).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius:12))
                         }
                     }
-                    if !report.files.isEmpty {Button("导出对照图和资料"){shareItems=report.files;sharing=true}}
+                    if !report.files.isEmpty {Button("导出对照图和资料"){export(report.files,to:.share)}}
                 }.padding(16)
             }.background(AppTheme.bg).foregroundColor(AppTheme.text)
                 .navigationTitle("地图显示问题").navigationBarTitleDisplayMode(.inline)
                 .toolbar{ToolbarItem(placement:.confirmationAction){Button("完成"){dismiss()}}}
-        }.sheet(isPresented:$sharing){MapSampleShare(items:shareItems)}
+        }.sheet(item:$exportRequest){request in
+            MapReportExportSheet(request:request){exportRequest=nil}
+        }.alert("无法导出",isPresented:Binding(get:{exportError != nil},set:{if !$0 {exportError=nil}})) {
+            Button("确定",role:.cancel){exportError=nil}
+        } message:{Text(exportError ?? "记录文件暂不可用。")}
     }
-}
-private struct MapSampleShare:UIViewControllerRepresentable {
-    let items:[URL]
-    func makeUIViewController(context:Context)->UIActivityViewController {UIActivityViewController(activityItems:items,applicationActivities:nil)}
-    func updateUIViewController(_ controller:UIActivityViewController,context:Context){}
+    private func export(_ files:[URL],to destination:MapExportRequest.Destination) {
+        do {exportRequest=try MapExportRequest(files:files,destination:destination)}
+        catch {exportError=error.localizedDescription}
+    }
 }

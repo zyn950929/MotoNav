@@ -1,14 +1,14 @@
-name: iOS 0.16 route map clock and music fixes build7
+name: iOS 0.16 route map clock and music fixes build8
 on:
   push:
-    branches: [codex/ios-016-map-trace-20261031]
+    branches: [codex/ios-016-export-fix-20261031]
     paths: ['ios/**', '.github/workflows/ios-ui-aligned-016.yml']
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: motonav-ios-map-trace-build7
+  group: motonav-ios-export-fix-build8
   cancel-in-progress: true
 jobs:
   ipa:
@@ -65,6 +65,10 @@ jobs:
           /tmp/map-delivery
           swiftc ios/MotoNav/BleBulkWriteQueue.swift ios/MotoNav/BleWritePacer.swift ios/tests/ble-bulk/main.swift -o /tmp/bulk
           /tmp/bulk
+      - name: Verify report export and record recovery
+        run: |
+          swiftc ios/MotoNav/MapReportExport.swift ios/tests/map-export/main.swift -o /tmp/map-export
+          /tmp/map-export
       - name: Build iPhone Release arm64
         run: |
           set -o pipefail
@@ -74,20 +78,35 @@ jobs:
           set -euo pipefail
           APP="$RUNNER_TEMP/Derived/Build/Products/Release-iphoneos/MotoNav.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Info.plist")" = '0.16.0'
-          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Info.plist")" = '7'
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Info.plist")" = '8'
           test -f "$APP/PlugIns/MotoNavShare.appex/MotoNavShare"
           mkdir -p output/ios "$RUNNER_TEMP/Stage/Payload"
           ditto "$APP" "$RUNNER_TEMP/Stage/Payload/MotoNav.app"
           xcrun strip -S "$RUNNER_TEMP/Stage/Payload/MotoNav.app/MotoNav"
           xcrun strip -S "$RUNNER_TEMP/Stage/Payload/MotoNav.app/PlugIns/MotoNavShare.appex/MotoNavShare"
-          (cd "$RUNNER_TEMP/Stage" && zip -qry "$GITHUB_WORKSPACE/output/ios/MotoNav-0.16.0-map-trace-build7-unsigned.ipa" Payload)
+          (cd "$RUNNER_TEMP/Stage" && zip -qry "$GITHUB_WORKSPACE/output/ios/MotoNav-0.16.0-export-fix-build8-unsigned.ipa" Payload)
           (cd output/ios && shasum -a 256 *.ipa > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: MotoNav-iOS-0.16.0-MapTrace-Build7
+          name: MotoNav-iOS-0.16.0-ExportFix-Build8
           path: |
             output/ios/
             build-ios.log
             parity-tests.log
+          if-no-files-found: warn
+
+  export-ui:
+    runs-on: macos-26
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check first native share and save presentations
+        timeout-minutes: 4
+        run: python3 ios/tests/map-export-ui/run.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MotoNav-iOS-0.16.0-ExportFix-Build8-UI
+          path: output/export-ui/
           if-no-files-found: warn

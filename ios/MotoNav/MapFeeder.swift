@@ -489,7 +489,7 @@ enum MapPipelineTrace {
     static func finish(completion:@escaping(URL?)->Void) {
         gate.lock();defer{gate.unlock()};enabled=false
         queue.async {
-            let root=FileManager.default.urls(for:.cachesDirectory,in:.userDomainMask)[0].appendingPathComponent("map-pipeline",isDirectory:true)
+            let root=FileManager.default.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("MotoNav-Diagnostics",isDirectory:true)
             let url=root.appendingPathComponent("map-timing-"+UUID().uuidString+".json")
             var report=buffer.document
             report["version"]=APP_VERSION;report["build"]=Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") ?? ""
@@ -510,6 +510,14 @@ final class MapTraceReport:ObservableObject {
     @Published private(set) var files:[URL]=[]
     @Published private(set) var status="开始模拟前记录，出现底图空白后停止并导出。"
     private var timer:Timer?
+    private init() {
+        let manager=FileManager.default
+        let saved=manager.urls(for:.documentDirectory,in:.userDomainMask)[0].appendingPathComponent("MotoNav-Diagnostics",isDirectory:true)
+        let legacy=manager.urls(for:.cachesDirectory,in:.userDomainMask)[0].appendingPathComponent("map-pipeline",isDirectory:true)
+        if let previous=MapReportFiles.latestTiming(in:[saved,legacy]) {
+            files=[previous];status="已找到上次保存的衔接记录，可直接保存或分享。"
+        }
+    }
     func begin() {
         guard !recording && !exporting else {return}
         files=[];recording=true;status="正在记录地图衔接，最长 10 分钟。"
