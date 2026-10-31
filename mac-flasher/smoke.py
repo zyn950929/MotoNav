@@ -51,8 +51,8 @@ with tempfile.TemporaryDirectory(prefix='MotoNav Mac 圆屏测试 ') as temp:
   r=subprocess.run([str(launcher),*args],input=answer,capture_output=True,text=True,env={**env,'MAC_FLASH_TEST_EXIT':exit_code},timeout=30)
   check(r.returncode==code,'launcher flow failed: '+r.stdout+r.stderr)
   return record.read_text().splitlines() if record.exists() else [],r
- args,_=flow([], '\n');check(args[-2:]==['0x10000',str(mock/'firmware'/app.name)] and '--erase-all' not in args,'default upgrade erases or wrong offset')
- args,_=flow(['--full'],'INSTALL\n');check('--erase-all' in args and args[-2:]==['0x0',str(mock/'firmware'/full.name)],'full install flag/offset')
+ args,_=flow([], '\n');check(len(args)>=2 and args[-2]=='0x10000' and Path(args[-1]).resolve()==(mock/'firmware'/app.name).resolve() and '--erase-all' not in args,'default upgrade flag/offset: '+repr(args))
+ args,_=flow(['--full'],'INSTALL\n');check(len(args)>=2 and '--erase-all' in args and args[-2]=='0x0' and Path(args[-1]).resolve()==(mock/'firmware'/full.name).resolve(),'full install flag/offset: '+repr(args))
  args,_=flow(['--full'],'NO\n');check(not args,'cancelled full install wrote')
  args,_=flow([], '3\n');check(not args,'cancel wrote')
  args,_=flow(['--port','/dev/cu.NOT_A_DEVICE'],'',code=1);check(not args,'invalid port wrote')
