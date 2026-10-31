@@ -1,0 +1,28 @@
+name: Export verified locked iOS dependencies
+on:
+  push:
+    branches: [codex/ios-parity-016-20261031]
+    paths: ['.github/workflows/export-locked-ios-cache.yml']
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: macos-26
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        id: cached
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods/repos
+          key: ios-pods-macOS-24c25f41f9bf039417b8f3b2a77174bb1841d545d1877550bf6f812307f12071
+          fail-on-cache-miss: true
+      - name: Package only public SDK download cache
+        run: tar -czf "$RUNNER_TEMP/ios-locked-pods-cache.tar.gz" -C "$HOME/Library/Caches" CocoaPods
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-locked-pods-cache
+          path: ${{ runner.temp }}/ios-locked-pods-cache.tar.gz
+          retention-days: 7
