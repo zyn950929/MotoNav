@@ -21,6 +21,7 @@ final class SearchService: NSObject, ObservableObject {
     @Published var results: [Place] = []
     @Published var status = ""
     private var api: AMapSearchAPI?
+    private var activeSearch=""
     private var cache: [String: [Place]] = [:]         // 关键词 → 结果（只存在内存里）
 
     override init() {
@@ -39,35 +40,40 @@ final class SearchService: NSObject, ObservableObject {
     }
 
     /// 按了“搜索”时调用（每按一次最多查一次高德）
-    func search(_ text: String) {
+    func search(_ text: String, near: (Double,Double)? = nil) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.isEmpty { clear(); return }
-        if let r = cache[t] {                           // 查过的不再花额度
+        let around=near ?? LocationService.shared.location.map{l -> (Double,Double) in
+            let g=MapGeo.wgsToGcj(l.coordinate.latitude,l.coordinate.longitude);return(g.lat,g.lng)
+        }
+        let location=around.map{String(format:"%.6f,%.6f",$0.1,$0.0)} ?? ""
+        let searchKey=t+"|"+location
+        activeSearch=searchKey
+        if let r = cache[searchKey] {                           // 查过的不再花额度
             results = r
             status = r.isEmpty ? "没找到，换个说法试试" : ""
             return
         }
         let req = AMapInputTipsSearchRequest()
         req.keywords = t
-        if let loc = LocationService.shared.location {
-            let g = MapGeo.wgsToGcj(loc.coordinate.latitude, loc.coordinate.longitude)   // 高德要高德坐标
-            req.location = String(format: "%.6f,%.6f", g.lng, g.lat)                   // 附近优先
-        }
+        if !location.isEmpty {req.location=location}
         status = "搜索中…"
         api?.aMapInputTipsSearch(req)
     }
 
-    func clear() { results = []; status = "" }
+    func clear() { activeSearch="";results = []; status = "" }
 
     @objc(onInputTipsSearchDone:response:)
     func mnTipsDone(_ request: AMapInputTipsSearchRequest?, response: AMapInputTipsSearchResponse?) {
+        let searchKey=(request?.keywords ?? "")+"|"+(request?.location ?? "")
+        guard searchKey==activeSearch else{return}
         let tips = response?.tips ?? []
         results = tips.compactMap { (tip: AMapTip) -> Place? in
             guard let p = tip.location else { return nil }          // 没有坐标的是“搜索建议词”，跳过
             return Place(name: tip.name ?? "", address: (tip.district ?? "") + (tip.address ?? ""),
                          lat: Double(p.latitude), lng: Double(p.longitude))
         }
-        if let k = request?.keywords { cache[k] = results }
+        cache[searchKey] = results
         status = results.isEmpty ? "没找到，换个说法试试" : ""
     }
 

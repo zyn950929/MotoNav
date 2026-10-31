@@ -1,5 +1,6 @@
 import Foundation
 import CoreBluetooth
+import UIKit
 
 /// 版本：跟随 App 版本（见 Config.swift 的 APP_VERSION）
 ///
@@ -61,6 +62,8 @@ final class BleLink: NSObject, ObservableObject {
     private var stateOrder: [String] = []
     private var lastImg: [Int: (w: Int, h: Int, data: Data)] = [:]
     private var imgId = [Int](repeating: 0, count: 13)
+    private var phoneClock=PhoneClockSync()
+    private var clockObserver:NSObjectProtocol?
     private var heartbeat: Timer?
     private var lastWriteAt = Date.distantPast
     private var writePacer = BleWritePacer()
@@ -73,7 +76,9 @@ final class BleLink: NSObject, ObservableObject {
         super.init()
         central = CBCentralManager(delegate: self, queue: .main,
                                    options: [CBCentralManagerOptionRestoreIdentifierKey: "motonav.central"])
+        clockObserver=NotificationCenter.default.addObserver(forName:UIApplication.significantTimeChangeNotification,object:nil,queue:.main){[weak self] _ in self?.syncPhoneClock(force:true)}
         heartbeat = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            self?.syncPhoneClock()
             self?.checkConnectionSetup()
             self?.requestBuildingCapability()
             MusicBridge.shared.syncLyrics()
@@ -161,6 +166,13 @@ final class BleLink: NSObject, ObservableObject {
         return min(min(p.maximumWriteValueLength(for: .withoutResponse), response), MAX_WRITE)
     }
 
+    func syncPhoneClock(force:Bool=false) {
+        guard isReady,verified else{return}
+        let now=Date()
+        if let message=phoneClock.message(wall:now.timeIntervalSince1970,uptime:ProcessInfo.processInfo.systemUptime,
+            offset:TimeZone.current.secondsFromGMT(for:now),force:force){sendOnce(message)}
+    }
+
     // MARK: - 发送
 
     private func keyOf(_ msg: String) -> String {
@@ -171,6 +183,7 @@ final class BleLink: NSObject, ObservableObject {
 
     /// 发一条文字消息（同类型只留最新）
     func send(_ msg: String) {
+        if msg.hasPrefix("#TIME,"){sendOnce(msg);return}
         let k = keyOf(msg)
         if msg == "C" {                                 // 清屏：状态全部忘掉（亮度、风格、方向这些设置除外）
             let keep: Set<String> = ["#b", "#t", "#R", "#Q", "#n", "#m", "#r", "#w"]
@@ -368,6 +381,7 @@ final class BleLink: NSObject, ObservableObject {
         writePacer.reset()
         status = "已连接（数据包 \(maxWrite) 字节）"
         queue.removeAll()
+        phoneClock=PhoneClockSync()
         bulkQ.reset(); bulkBarrier.reset(); bulkWriteSerial += 1
         if let b = lastState["#b"] { enqueue("#b", Data(b.utf8)) }
         for k in stateOrder where k != "#b" { if let v = lastState[k] { enqueue(k, Data(v.utf8)) } }
@@ -490,7 +504,7 @@ extension BleLink: CBCentralManagerDelegate, CBPeripheralDelegate {
         guard let raw = String(data: d, encoding: .utf8) else { return }
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if s == "U,1", !verified {
-            verified = true; buildingProbe.reset(); requestBuildingCapability(); Settings.shared.pushAll(); MapFeeder.shared.resendAll(); return
+            verified = true; syncPhoneClock(force:true); buildingProbe.reset(); requestBuildingCapability(); Settings.shared.pushAll(); MapFeeder.shared.resendAll(); return
         }
         if s == "CAP,HID,1" {
             mediaHIDSupported = true

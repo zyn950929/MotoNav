@@ -1,0 +1,56 @@
+name: iOS 0.16 parity IPA
+on:
+  push:
+    branches: [codex/ios-parity-016-20261031]
+    paths: ['ios/**', '.github/workflows/ios-parity-016.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ipa:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install locked dependencies
+        working-directory: ios
+        run: |
+          sudo gem install cocoapods -v 1.16.2 --no-document
+          pod _1.16.2_ install --deployment
+      - name: Verify navigation, BLE clock and route history
+        run: |
+          set -euo pipefail
+          python3 ios/tests/webmotor/check.py | tee parity-tests.log
+          swiftc ios/MotoNav/ArrivalPolicy.swift ios/tests/arrival/main.swift -o /tmp/arrival
+          /tmp/arrival
+          swiftc ios/MotoNav/ArrivalPolicy.swift ios/MotoNav/NaviSessionCallbacks.swift ios/tests/arrival-relay/SDKStubs.swift ios/tests/arrival-relay/main.swift -o /tmp/relay
+          /tmp/relay
+          swiftc -O ios/MotoNav/MapGeo.swift ios/MotoNav/RasterProcessing.swift ios/MotoNav/MapStyles.swift ios/tests/four-styles/main.swift -o /tmp/styles
+          /tmp/styles
+          swiftc ios/MotoNav/BleBulkWriteQueue.swift ios/MotoNav/BleWritePacer.swift ios/tests/ble-bulk/main.swift -o /tmp/bulk
+          /tmp/bulk
+      - name: Build iPhone Release arm64
+        run: |
+          set -o pipefail
+          xcodebuild -workspace ios/MotoNav.xcworkspace -scheme MotoNav -destination 'generic/platform=iOS' -configuration Release -derivedDataPath "$RUNNER_TEMP/Derived" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= build | tee build-ios.log
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/Derived/Build/Products/Release-iphoneos/MotoNav.app"
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Info.plist")" = '0.16.0'
+          test -f "$APP/PlugIns/MotoNavShare.appex/MotoNavShare"
+          mkdir -p output/ios "$RUNNER_TEMP/Stage/Payload"
+          ditto "$APP" "$RUNNER_TEMP/Stage/Payload/MotoNav.app"
+          xcrun strip -S "$RUNNER_TEMP/Stage/Payload/MotoNav.app/MotoNav"
+          xcrun strip -S "$RUNNER_TEMP/Stage/Payload/MotoNav.app/PlugIns/MotoNavShare.appex/MotoNavShare"
+          (cd "$RUNNER_TEMP/Stage" && zip -qry "$GITHUB_WORKSPACE/output/ios/MotoNav-0.16.0-unsigned.ipa" Payload)
+          (cd output/ios && shasum -a 256 *.ipa > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MotoNav-iOS-0.16.0
+          path: |
+            output/ios/
+            build-ios.log
+            parity-tests.log
+          if-no-files-found: warn

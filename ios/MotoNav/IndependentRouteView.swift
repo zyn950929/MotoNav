@@ -1,163 +1,157 @@
 import SwiftUI
 import CoreLocation
 
-enum IndependentMode: String, CaseIterable, Identifiable {
-    case motorcycle="摩托车", bicycle="自行车"
-    var id: String { rawValue }
+enum IndependentMode:String,CaseIterable,Identifiable {
+    case motorcycle="摩托车",bicycle="自行车"
+    var id:String{rawValue}
 }
 
-final class IndependentPlanner: ObservableObject {
-    @Published var start: MotorPoint?
-    @Published var end: MotorPoint?
-    @Published var vias: [MotorPoint]=[]
-    @Published var routes: [MotorRoute]=[]
+final class IndependentPlanner:ObservableObject {
+    @Published var start:MotorPoint?
+    @Published var end:MotorPoint?
+    @Published var vias:[MotorPoint]=[]
+    @Published var routes:[MotorRoute]=[]
     @Published var selected=0
     @Published var busy=false
     @Published var message=""
     private var generation=UUID()
-    private var task: Task<Void,Never>?
-    func invalidate() { generation=UUID();task?.cancel();task=nil;routes=[];selected=0;busy=false }
-    func plan(_ mode: IndependentMode) {
-        guard !WebMotorSession.shared.running,!NaviBridge.shared.navigating,!NaviBridge.shared.cruising else { message="请先结束当前导航或巡航";return }
-        guard !Settings.shared.keysMissing else { message="请先在地图 Key 页面填写自己的高德 iOS Key";return }
-        let origin: MotorPoint
-        if let start=start { origin=start }
-        else {
-            guard let fix=LocationService.shared.location,fix.horizontalAccuracy>=0,fix.horizontalAccuracy<=100,abs(fix.timestamp.timeIntervalSinceNow)<15 else { message="当前位置尚未就绪，请等待定位或手动选择起点";LocationService.shared.start();return }
+    private var task:Task<Void,Never>?
+    func invalidate(){generation=UUID();task?.cancel();task=nil;routes=[];selected=0;busy=false}
+    func load(_ entry:SavedMotorPlan){
+        guard entry.valid else{return}
+        invalidate();start=entry.request.start;end=entry.request.end;vias=entry.request.vias
+        message="已恢复起终点和途经点，点击规划获取最新路线"
+    }
+    func plan(_ mode:IndependentMode){
+        guard !WebMotorSession.shared.running,!NaviBridge.shared.navigating,!NaviBridge.shared.cruising else{message="请先结束当前导航或巡航";return}
+        guard !Settings.shared.keysMissing else{message="请先填写自己的高德 iOS Key";return}
+        let origin:MotorPoint
+        if let start=start{origin=start}else{
+            guard let fix=LocationService.shared.location,fix.horizontalAccuracy>=0,fix.horizontalAccuracy<=100,abs(fix.timestamp.timeIntervalSinceNow)<15 else{
+                message="当前位置尚未就绪，请等待定位或手动选择起点";LocationService.shared.start();return
+            }
             let g=MapGeo.wgsToGcj(fix.coordinate.latitude,fix.coordinate.longitude)
             origin=MotorPoint(lat:g.lat,lng:g.lng,name:"我的位置")
         }
-        guard let end=end else { message="请选择目的地";return }
+        guard let end=end else{message="请选择目的地";return}
         invalidate();let token=generation
-        let request=MotorRequest(start:origin,end:end,vias:mode == .bicycle ? [] : vias,bicycle:mode == .bicycle)
+        let request=MotorRequest(start:origin,end:end,vias:mode == .bicycle ? []:vias,bicycle:mode == .bicycle)
         busy=true;message="正在规划\(mode.rawValue)路线…"
         task=Task { @MainActor [weak self] in
-            do {
+            do{
                 let result=try await MotorRoutes.load(request)
-                guard let self=self,self.generation==token,!Task.isCancelled else { return }
+                guard let self=self,self.generation==token,!Task.isCancelled else{return}
                 self.routes=result;self.selected=0;self.busy=false
                 self.message="已找到 \(result.count) 条路线，请选择方案"
-            } catch {
-                guard let self=self,self.generation==token,!Task.isCancelled else { return }
+                if let first=result.first{MotorPlanHistory.shared.save(first)}
+            }catch{
+                guard let self=self,self.generation==token,!Task.isCancelled else{return}
                 self.busy=false;self.message=error.localizedDescription
             }
         }
     }
 }
 
-struct PlacePickerView: View {
-    let title: String
-    let choose: (MotorPoint)->Void
-    @StateObject private var search=SearchService()
-    @State private var query=""
-    @Environment(\.dismiss) private var dismiss
-    var body: some View {
-        NavigationView {
-            List {
-                HStack {
-                    TextField("搜索地点或地址",text:$query).submitLabel(.search).onSubmit{search.search(query)}
-                    Button("搜索"){search.search(query)}
-                }
-                if !search.status.isEmpty { Text(search.status).font(.caption) }
-                ForEach(search.results) { p in
-                    Button {
-                        choose(MotorPoint(lat:p.lat,lng:p.lng,name:p.name));dismiss()
-                    } label: {
-                        VStack(alignment:.leading,spacing:4){Text(p.name);Text(p.address).font(.caption).foregroundColor(.secondary)}
-                    }
-                }
-                if search.results.isEmpty && query.isEmpty {
-                    ForEach(History.shared.places) { p in
-                        Button(p.name){choose(MotorPoint(lat:p.lat,lng:p.lng,name:p.name));dismiss()}
-                    }
-                }
-            }.navigationTitle(title).toolbar{ToolbarItem(placement:.cancellationAction){Button("取消"){dismiss()}}}
-        }.preferredColorScheme(.dark)
-    }
-}
-
-struct MotorLoginView: View {
+struct MotorLoginView:View {
     @StateObject private var browser=MotorBrowser()
-    let page: URL?
+    let page:URL?
     @Environment(\.dismiss) private var dismiss
-    var body: some View {
-        NavigationView {
-            VStack {
+    var body:some View {
+        NavigationView{
+            VStack{
                 Text("仅在登录或验证时打开网页。登录保存在本机，正常规划可直接在 App 完成。").font(.caption).padding()
                 MotorBrowserView(browser:browser)
                 Text(browser.status).font(.caption)
             }.navigationTitle("高德登录／验证").toolbar{ToolbarItem(placement:.confirmationAction){Button("完成"){dismiss()}}}
-        }.onAppear{if let page=page {browser.web.load(URLRequest(url:page))}}
+        }.onAppear{if let page=page{browser.web.load(URLRequest(url:page))}}
     }
 }
 
-struct IndependentPlannerView: View {
+struct IndependentPlannerView:View {
     @StateObject private var model=IndependentPlanner()
     @ObservedObject var guide=WebMotorSession.shared
-    @State private var mode: IndependentMode
-    @State private var pick: Int? // 0 origin, 1 destination, 2 via
+    @State private var mode:IndependentMode
+    @State private var pick:Int?
     @State private var login=false
     @State private var loaded=false
+    @State private var waypoints=false
+    @State private var showHistory=false
+    @State private var simulationSpeed=60
     @Environment(\.dismiss) private var dismiss
-    init(mode: IndependentMode) { _mode=State(initialValue:mode) }
-    var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(alignment:.leading,spacing:16) {
+    init(mode:IndependentMode){_mode=State(initialValue:mode)}
+    var body:some View {
+        NavigationView{
+            ScrollView{
+                VStack(alignment:.leading,spacing:16){
                     Picker("出行方式",selection:$mode){ForEach(IndependentMode.allCases){Text($0.rawValue).tag($0)}}.pickerStyle(.segmented)
                         .onChange(of:mode){_ in model.invalidate();model.message=""}
-                    CardView {
-                        Button{pick=0}label:{Label(model.start?.name.isEmpty == false ? model.start!.name : "我的位置（点此更改起点）",systemImage:"location")}
-                        if model.start != nil {Button("使用当前位置"){model.start=nil;model.invalidate()}.font(.caption)}
-                        Divider()
-                        Button{pick=1}label:{Label(model.end?.name.isEmpty == false ? model.end!.name : "输入目的地",systemImage:"mappin.and.ellipse")}
-                        if mode == .motorcycle {
-                            ForEach(model.vias.indices,id:\.self){i in HStack{Text("途经 \(i+1)：\(model.vias[i].name)");Spacer();Button("移除"){model.vias.remove(at:i);model.invalidate()}}}
-                            if model.vias.count<3 {Button("添加途经点"){pick=2}}
-                        }
-                        PillButton(title:model.busy ? "正在规划…" : "规划\(mode.rawValue)路线",color:ContentView.pink,enabled:!model.busy && model.end != nil){model.plan(mode)}
-                    }
-                    if !model.message.isEmpty {Text(model.message).font(.footnote).foregroundColor(ContentView.sub)}
-                    if mode == .motorcycle {Button("高德登录／验证"){login=true}.font(.footnote).foregroundColor(ContentView.cyan)}
-                    if let route=model.routes.indices.contains(model.selected) ? model.routes[model.selected] : nil {
-                        MotorMap(route:route,position:nil,overview:true).frame(height:260).clipShape(RoundedRectangle(cornerRadius:18))
-                        ForEach(Array(model.routes.enumerated()),id:\.offset){i,r in
-                            Button{model.selected=i}label:{
-                                HStack{
-                                    Image(systemName:model.selected==i ? "checkmark.circle.fill" : "circle")
-                                    VStack(alignment:.leading,spacing:4){Text("方案 \(i+1) · \(NaviBridge.durText(r.seconds))").bold();Text(NaviBridge.distText(r.totalMeters)).font(.subheadline)}
-                                    Spacer()
-                                }.padding(14).background(RoundedRectangle(cornerRadius:14).fill(ContentView.card))
-                            }
-                        }
-                        HStack {
-                            PillButton(title:"开始导航",color:ContentView.pink,enabled:!model.busy){begin(route,false)}
-                            PillButton(title:"模拟导航",color:.purple,enabled:!model.busy){begin(route,true)}
-                        }
-                    }
-                    Text(mode == .motorcycle ? "路线由高德摩托车网页服务规划；登录或验证过期时按上方入口处理。" : "使用高德 iOS SDK 自行车规划，路线不会交给驾车导航引擎。").font(.caption).foregroundColor(ContentView.sub)
+                    inputCard
+                    HStack{
+                        Button("路线历史"){showHistory=true};Spacer()
+                        if mode == .motorcycle{Button("高德登录／验证"){login=true}}
+                    }.font(.subheadline)
+                    if !model.message.isEmpty{Text(model.message).font(.footnote).foregroundColor(ContentView.sub)}
+                    if let route=selectedRoute{routeOptions(route)}
+                    Text(mode == .motorcycle ? "摩托车路线由高德网页服务规划；账号过期时请完成登录或验证。":"使用高德 iOS SDK 自行车规划。").font(.caption).foregroundColor(ContentView.sub)
+                    Text("锁屏前请等待沿线底图准备；后台继续定位、语音和蓝牙，尚未准备的地图需回前台下载。").font(.caption).foregroundColor(ContentView.sub)
                 }.padding(16)
             }.background(ContentView.bg).navigationTitle("\(mode.rawValue)路线")
                 .toolbar{ToolbarItem(placement:.cancellationAction){Button("返回首页"){dismiss()}}}
         }.foregroundColor(.white).tint(ContentView.pink)
         .sheet(isPresented:Binding(get:{pick != nil},set:{if !$0{pick=nil}})){
-            PlacePickerView(title:pick==0 ? "选择起点" : pick==2 ? "选择途经点" : "选择目的地"){point in
-                if pick==0{model.start=point}else if pick==2{model.vias.append(point)}else{model.end=point}
-                model.invalidate();pick=nil
+            RoutePointPicker(title:pick==0 ? "选择起点":"选择目的地",near:model.start){point in
+                if pick==0{model.start=point}else{model.end=point};model.invalidate();pick=nil
             }
         }
+        .sheet(isPresented:$waypoints){RouteWaypointEditor(points:model.vias,near:model.start){points in model.vias=points;model.invalidate()}}
+        .sheet(isPresented:$showHistory){MotorHistoryView(bicycle:mode == .bicycle){entry in model.load(entry)}}
         .sheet(isPresented:$login){MotorLoginView(page:nil)}
         .onAppear{
             guard !loaded else{return};loaded=true
-            if let route=guide.route,route.request.bicycle == (mode == .bicycle),!guide.running {
+            LocationService.shared.start()
+            if let route=guide.route,route.request.bicycle == (mode == .bicycle),!guide.running{
                 model.start=route.request.start;model.end=route.request.end;model.vias=route.request.vias;model.routes=[route]
+            }
+        }
+    }
+    private var selectedRoute:MotorRoute?{model.routes.indices.contains(model.selected) ? model.routes[model.selected]:nil}
+    private var inputCard:some View {
+        CardView{
+            Button{pick=0}label:{Label(model.start?.name.isEmpty == false ? model.start!.name:"我的位置（点此更改起点）",systemImage:"location")}
+            if model.start != nil{Button("使用当前位置"){model.start=nil;model.invalidate()}.font(.caption)}
+            Divider()
+            Button{pick=1}label:{Label(model.end?.name.isEmpty == false ? model.end!.name:"输入目的地",systemImage:"mappin.and.ellipse")}
+            if let point=model.end{Button("收藏目的地"){Favorites.shared.add(SearchService.Place(name:point.name,address:"",lat:point.lat,lng:point.lng))}.font(.caption)}
+            if mode == .motorcycle{
+                Button{waypoints=true}label:{Label(model.vias.isEmpty ? "添加途经点（最多三个）":"途经："+model.vias.map{$0.name}.joined(separator:" → "),systemImage:"point.topleft.down.curvedto.point.bottomright.up")}
+            }
+            PillButton(title:model.busy ? "正在规划…":"规划\(mode.rawValue)路线",color:ContentView.pink,enabled:!model.busy && model.end != nil){model.plan(mode)}
+        }
+    }
+    private func routeOptions(_ route:MotorRoute)->some View {
+        VStack(alignment:.leading,spacing:14){
+            MotorMap(route:route,position:nil,overview:true).frame(height:260).clipShape(RoundedRectangle(cornerRadius:18))
+            ForEach(Array(model.routes.enumerated()),id:\.offset){i,r in
+                Button{model.selected=i}label:{
+                    HStack{
+                        Image(systemName:model.selected==i ? "checkmark.circle.fill":"circle")
+                        VStack(alignment:.leading,spacing:4){Text("方案 \(i+1) · \(NaviBridge.durText(r.seconds))").bold();Text(NaviBridge.distText(r.totalMeters)).font(.subheadline)}
+                        Spacer()
+                    }.padding(14).background(RoundedRectangle(cornerRadius:14).fill(ContentView.card))
+                }
+            }
+            Picker("模拟速度",selection:$simulationSpeed){ForEach(NavigationSpeed.values,id:\.self){Text("\($0) km/h").tag($0)}}.pickerStyle(.segmented)
+            HStack{
+                PillButton(title:"模拟导航",color:.purple,enabled:!model.busy){begin(route,true)}
+                PillButton(title:"开始导航",color:ContentView.pink,enabled:!model.busy){begin(route,false)}
             }
         }
     }
     private func begin(_ route:MotorRoute,_ simulate:Bool){
         guard !NaviBridge.shared.navigating,!NaviBridge.shared.cruising,!guide.running else{model.message="请先结束当前导航或巡航";return}
         History.shared.add(SearchService.Place(name:route.request.end.name,address:"",lat:route.request.end.lat,lng:route.request.end.lng))
-        guide.start(route,simulate:simulate)
+        MotorPlanHistory.shared.save(route)
+        guide.start(route,simulate:simulate,simulationSpeed:simulationSpeed)
     }
 }
 
@@ -193,7 +187,7 @@ struct IndependentNavigationView: View {
                         Spacer();Button("返回设置"){dismiss()}
                     }.font(.subheadline)
                     if guide.simulation {
-                        HStack{Button(guide.paused ? "继续" : "暂停"){guide.paused.toggle()};Spacer();Button("\(guide.speed) km/h"){guide.speed=guide.speed==60 ? 120 : guide.speed==120 ? 180 : 60}}
+                        HStack{Button(guide.paused ? "继续" : "暂停"){guide.paused.toggle()};Spacer();Button("\(guide.speed) km/h"){guide.speed=NavigationSpeed.next(guide.speed)}}
                     }
                     Button("结束导航"){confirmExit=true}.foregroundColor(.red)
                 }.padding(18).background(RoundedRectangle(cornerRadius:22).fill(ContentView.bg.opacity(0.94)))

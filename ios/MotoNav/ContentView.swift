@@ -32,6 +32,10 @@ struct ContentView: View {
     private static var keyPrompted = false              // 这次打开 App 已经提醒过填 key 了
     @State private var shareBusy = false
     @State private var shareStatus = ""
+    @State private var pendingShare=""
+    @State private var shareImportID=UUID()
+    @State private var showShareVerification=false
+    @State private var showWaypointEditor=false
     @State private var cruiseNote = ""
     @State private var addingVia = false               // 正在搜途经点
 
@@ -85,6 +89,15 @@ struct ContentView: View {
         .sheet(isPresented: $showRides) { NavigationView { RideHistoryView() } }
         .fullScreenCover(isPresented: $showNavi) { NaviScreen() }
         .sheet(isPresented: $showKeys) { KeySetupView() }
+        .sheet(isPresented:$showShareVerification){
+            ShareVerificationView(page:AmapShare.findUrl(pendingShare).flatMap{URL(string:$0)}){
+                let text=pendingShare
+                DispatchQueue.main.asyncAfter(deadline:.now()+0.35){importShare(text)}
+            }
+        }
+        .sheet(isPresented:$showWaypointEditor){
+            RouteWaypointEditor(points:navi.vias.map{MotorPoint(lat:$0.lat,lng:$0.lng,name:$0.name)},near:nil){navi.replaceVias($0)}
+        }
         .onAppear {                                    // iOS v0.7 打开 App 时，高德或高德 key 没填就提醒一次
             if !ContentView.keyPrompted && settings.keysMissing {
                 ContentView.keyPrompted = true
@@ -190,6 +203,10 @@ struct ContentView: View {
             Text("在高德里规划好路线 → 分享 → 选 MotoNav；或者复制链接后点上面这行").font(.caption2).foregroundColor(ContentView.sub)
             }
             if !shareStatus.isEmpty { Text(shareStatus).font(.footnote).foregroundColor(ContentView.sub) }
+            if !pendingShare.isEmpty && !shareBusy {
+                Button("网页验证后重试"){showShareVerification=true}.foregroundColor(Self.cyan)
+            }
+            if addingVia{Button("搜索附近加油站"){query="加油站";search.search(query)}.foregroundColor(Self.cyan)}
             if !search.status.isEmpty { Text(search.status).font(.footnote).foregroundColor(ContentView.sub) }
             ForEach(search.results.prefix(8)) { p in
                 Button { choose(p) } label: {
@@ -253,9 +270,9 @@ struct ContentView: View {
                             Button("取消") { addingVia = false; query = d.name; search.clear() }
                                 .font(.caption).foregroundColor(ContentView.sub)
                         } else {
-                            Button("+ 途经点") { addingVia = true; query = ""; search.clear() }
+                            Button(navi.vias.isEmpty ? "+ 途经点":"编辑途经点") { showWaypointEditor=true }
                                 .font(.caption).foregroundColor(navi.vias.count >= 3 ? ContentView.sub : ContentView.cyan)
-                                .disabled(navi.vias.count >= 3)
+                                .disabled(navi.navigating)
                             if !navi.vias.isEmpty {
                                 Button("清除") { navi.clearVias() }.font(.caption).foregroundColor(ContentView.sub)
                             }
@@ -266,6 +283,7 @@ struct ContentView: View {
                             .font(.caption2).foregroundColor(Color.orange)
                     }
                 }
+                Picker("模拟速度",selection:$navi.preferredSimulationSpeed){ForEach(NavigationSpeed.values,id:\.self){Text("\($0) km/h").tag($0)}}.pickerStyle(.segmented)
                 Toggle("不走高速", isOn: $settings.avoidHighway)
                     .foregroundColor(.white).tint(ContentView.pink)
                     .onChange(of: settings.avoidHighway) { _ in navi.replan() }
@@ -354,30 +372,27 @@ struct ContentView: View {
         hideKeyboard()
         shareBusy = true
         shareStatus = "正在读取高德分享的路线…"
-        DispatchQueue.global(qos: .userInitiated).async {
-            let res = Result { try AmapShare.load(t) }
-            DispatchQueue.main.async {
-                shareBusy = false
-                guard !navi.navigating, !WebMotorSession.shared.running else { shareStatus = "导航已开始，请结束后重新导入"; return }
-                switch res {
-                case .success(let r):
-                    shareStatus = "已读取：\(r.kind)路线 \(NaviBridge.distText(r.distance > 0 ? r.distance : Int(r.total)))" +
-                        (r.timeS > 0 ? "，约 \(NaviBridge.durText(r.timeS))" : "") +
-                        (r.restored ? "" : "（高德没能原样还原，可能和分享的稍有不同）")
-                    let name = r.endName.isEmpty ? "分享的目的地" : r.endName
-                    dest = SearchService.Place(name: name, address: "高德分享的\(r.kind)路线", lat: r.endLat, lng: r.endLng)
-                    History.shared.add(SearchService.Place(name: name, address: "", lat: r.endLat, lng: r.endLng))
-                    query = name
-                    search.clear()
-                    if r.kind == "自行车" {
-                        navi.clearPlan()
-                        WebMotorSession.shared.route = MotorRoutes.fromShare(r)
-                        independentMode = .bicycle
-                        showWebMotor = true
-                    } else if !needAmapKey() { navi.plan(toLat: r.endLat, lng: r.endLng, share: r) }
-                case .failure(let e):
-                    shareStatus = "读取失败：\(e.localizedDescription)"
-                }
+        pendingShare=t
+        let sequence=UUID();shareImportID=sequence
+        Task { @MainActor in
+            defer{if shareImportID==sequence{shareBusy=false}}
+            do{
+                let r=try await AmapWebSession.loadShare(t)
+                guard shareImportID==sequence,!navi.navigating,!WebMotorSession.shared.running else{shareStatus="导航状态已改变，请结束后重新导入";return}
+                shareStatus="已读取：\(r.kind)路线 \(NaviBridge.distText(r.distance>0 ? r.distance:Int(r.total)))"+
+                    (r.restored ? "":"（高德未确认原样还原，请核对地图）")
+                pendingShare=""
+                let name=r.endName.isEmpty ? "分享的目的地":r.endName
+                dest=SearchService.Place(name:name,address:"高德分享的\(r.kind)路线",lat:r.endLat,lng:r.endLng)
+                History.shared.add(SearchService.Place(name:name,address:"",lat:r.endLat,lng:r.endLng))
+                query=name;search.clear()
+                if r.kind=="自行车" || r.kind=="摩托车"{
+                    navi.clearPlan();WebMotorSession.shared.route=MotorRoutes.fromShare(r)
+                    independentMode=r.kind=="自行车" ? .bicycle:.motorcycle;showWebMotor=true
+                }else if !needAmapKey(){navi.plan(toLat:r.endLat,lng:r.endLng,share:r)}
+            }catch{
+                guard shareImportID==sequence else{return}
+                shareStatus="读取失败：\(error.localizedDescription)；可完成网页验证后重试"
             }
         }
     }

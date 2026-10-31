@@ -3,8 +3,8 @@ import WebKit
 import CoreLocation
 import ObjectiveC
 
-struct MotorPoint { let lat: Double; let lng: Double; var name = ""; var id = "" }
-struct MotorRequest {
+struct MotorPoint: Codable { let lat: Double; let lng: Double; var name = ""; var id = "" }
+struct MotorRequest: Codable {
     var start: MotorPoint; let end: MotorPoint; var vias: [MotorPoint] = []; var bicycle = false
     var page: URL {
         var c = URLComponents(string: "https://www.amap.com/ssr/dir")!
@@ -180,14 +180,14 @@ final class WebMotorSession: ObservableObject {
     @Published var turnDirection = "S"
     @Published var remainingSeconds = 0
     private var watchdog: Timer?
-    func start(_ route: MotorRoute, simulate: Bool) {
+    func start(_ route: MotorRoute, simulate: Bool, simulationSpeed: Int = 60) {
         guard route.points.count>=2,!route.steps.isEmpty,!NaviBridge.shared.navigating,
               (route.cum.last ?? 0)>=3,(route.cum.last ?? 0)<=5_000_000,
               route.steps.allSatisfy({route.points.indices.contains($0.end)}) else { return }
         stop(); NaviBridge.shared.stop(); NaviBridge.shared.stopCruise()
         self.route = route; cum = route.cum; progress = 0; stepIndex = 0; simulation = simulate; paused = false; arrived = false; running = true
         tracker=MotorRouteTracker(route.points);confirmedArrival=false;metadataSuspended=false;simulationTick=nil;realHeading=nil
-        speed = 60; offCount = 0; nextVia = 0; lastFix = nil; viaProgress = route.request.vias.map { v in nearestAlong(v) }
+        speed = NavigationSpeed.values.contains(simulationSpeed) ? simulationSpeed : 60; offCount = 0; nextVia = 0; lastFix = nil; viaProgress = route.request.vias.map { v in nearestAlong(v) }
         roadSent = ""; footerSent = ""; startedAt = Date(); tripMeters = 0; tripMax = 0; previousFix = nil
         announced = ""; status = simulate ? "模拟导航" : "定位导航"; token = UUID()
         UIApplication.shared.isIdleTimerDisabled = true

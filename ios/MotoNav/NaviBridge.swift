@@ -44,7 +44,8 @@ final class NaviBridge: NSObject, ObservableObject {
     @Published private(set) var emulating = false
     @Published private(set) var emuPaused = false
     @Published private(set) var emuSpeed = 60
-    private static let EMU_SPEEDS = [40, 60, 100, 120]
+    private static let EMU_SPEEDS = NavigationSpeed.values
+    @Published var preferredSimulationSpeed=60
     // 调试信息
     @Published var laneRaw = "（还没收到车道信息）"
     @Published var camRaw = "（还没收到电子眼信息）"
@@ -239,6 +240,13 @@ final class NaviBridge: NSObject, ObservableObject {
         replan()
     }
 
+    func replaceVias(_ points:[MotorPoint]) {
+        guard !navigating,!cruising,shareRoute == nil,points.count<=3,
+              points.allSatisfy({MotorRequest.valid($0.lat,$0.lng)}) else{return}
+        vias=points.map{Via(name:$0.name,lat:$0.lat,lng:$0.lng)}
+        replan()
+    }
+
     func clearVias() {
         if vias.isEmpty { return }
         vias = []
@@ -375,7 +383,7 @@ final class NaviBridge: NSObject, ObservableObject {
         ShareGuide.shared.start(shareRoute, avoidHighway: Settings.shared.avoidHighway, emulate: emulate,
                                 myLat: me?.lat ?? .nan, myLng: me?.lng ?? .nan)          // 偏航跟随原路线 + 圆屏原路线细线
         emulating = emulate; emuPaused = false
-        if emulate { emuSpeed = 60; manager.setEmulatorNaviSpeed(Int32(emuSpeed)) }
+        if emulate { emuSpeed = NavigationSpeed.values.contains(preferredSimulationSpeed) ? preferredSimulationSpeed : 60; manager.setEmulatorNaviSpeed(Int32(emuSpeed)) }
         let ok = emulate ? manager.startEmulatorNavi() : manager.startGPSNavi()
         if ok && arrival.acceptsGuidance(token) {
             if !emulate { RideRecorder.shared.start("导航"); LocationService.shared.setPrecise(true) }
