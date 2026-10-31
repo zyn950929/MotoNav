@@ -170,7 +170,7 @@ struct IndependentNavigationView: View {
                     VStack(alignment:.leading,spacing:6){
                         Text(NaviBridge.distText(guide.turnMetres)).font(.system(size:30,weight:.heavy))
                         Text(guide.instruction).font(.headline).lineLimit(2)
-                        Text(guide.status.contains("正在重新规划") ? "偏离路线，正在重新规划…" : guide.simulation ? "模拟导航" : guide.status.contains("GPS") ? "定位信号较弱" : "").font(.caption).foregroundColor(ContentView.sub)
+                        if !navigationNotice.isEmpty {Text(navigationNotice).font(.caption).foregroundColor(ContentView.sub)}
                     };Spacer(minLength:0)
                 }.padding(18).background(RoundedRectangle(cornerRadius:22).fill(ContentView.bg.opacity(0.94)))
                 Spacer()
@@ -197,6 +197,13 @@ struct IndependentNavigationView: View {
             }
         }.foregroundColor(.white).tint(ContentView.pink)
         .alert("结束导航？",isPresented:$confirmExit){Button("结束",role:.destructive){guide.stop();guide.arrived=false;dismiss()};Button("继续导航",role:.cancel){}}
+    }
+    private var navigationNotice:String {
+        if guide.status.contains("重算失败") {return "重新规划暂未完成，将保留当前路线"}
+        if guide.status.contains("正在重新规划") {return "偏离路线，正在重新规划…"}
+        if guide.status.contains("已偏离路线") {return "已偏离路线"}
+        if guide.status.contains("GPS") {return "定位信号较弱"}
+        return guide.simulation ? "模拟导航":""
     }
     private var arrow:String {
         switch guide.turnDirection {case "L":return "arrow.turn.up.left";case "R":return "arrow.turn.up.right";case "SL":return "arrow.up.left";case "SR":return "arrow.up.right";case "U":return "arrow.uturn.down";default:return "arrow.up"}

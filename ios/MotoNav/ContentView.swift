@@ -630,7 +630,7 @@ struct ContentView: View {
             if value.contains("地图") { return "地图暂未准备完成，请保持 App 在前台后重试" }
             return "暂时未能完成，请检查网络和服务配置后重试"
         }
-        return value
+        return value.replacingOccurrences(of:#"（-?\d+）"#,with:"",options:.regularExpression)
     }
 
 }
