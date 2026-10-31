@@ -21,7 +21,6 @@ object MusicBridge {
     private var lastState = ""
     @Volatile var info = "等待圆屏音乐操作"
     private var operation = 0
-    private var coverRetrySeq = 0
     private val callback = object : MediaController.Callback() {
         override fun onMetadataChanged(metadata: MediaMetadata?) { publish() }
         override fun onPlaybackStateChanged(state: PlaybackState?) { publish() }
@@ -63,11 +62,7 @@ object MusicBridge {
         val playing = state?.state == PlaybackState.STATE_PLAYING
         // 部分播放器漏报 actions；允许发标准媒体按键，不按这些位禁用按钮。
         val mask = if (mc != null) 7 else 0
-        val durMs = meta?.getLong(MediaMetadata.METADATA_KEY_DURATION) ?: -1L
-        val posMs = state?.position ?: -1L
-        val durSec = if (durMs > 0) (durMs / 1000).toInt() else 0
-        val posSec = if (posMs >= 0) (posMs / 1000).toInt() else 0
-        val status = "#Z,${if (mc != null) 1 else 0},${if (playing) 1 else 0},$mask,$durSec,$posSec"
+        val status = "#Z,${if (mc != null) 1 else 0},${if (playing) 1 else 0},$mask"
         if (force || lastText != "$title\n$artist") {
             lastText = "$title\n$artist"
             for ((slot, text) in listOf(5 to title, 6 to artist)) {
@@ -75,50 +70,8 @@ object MusicBridge {
                 BleLink.sendImage(slot, image?.w ?: 0, image?.h ?: 0, image?.data ?: byteArrayOf())
             }
         }
-        syncCover(mc, meta, c, force)
         if (force || lastState != status) { lastState = status; BleLink.send(status) }
     }
-
-    private fun syncCover(mc: MediaController?, meta: MediaMetadata?, context: Context, force: Boolean) {
-        if (mc == null || meta == null) {
-            CoverFeeder.clearCover()
-            return
-        }
-        val tKey = track(mc)
-        val memBmp = try {
-            meta.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
-                ?: meta.getBitmap(MediaMetadata.METADATA_KEY_ART)
-        } catch (_: Throwable) { null }
-        if (memBmp != null && !memBmp.isRecycled) {
-            CoverFeeder.feedCover(memBmp, "$tKey#${memBmp.generationId}", force)
-            return
-        }
-        val uriStr = meta.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
-            ?: meta.getString(MediaMetadata.METADATA_KEY_ART_URI)
-        if (!uriStr.isNullOrBlank() && (uriStr.startsWith("content://") || uriStr.startsWith("file://"))) {
-            val covKey = "$tKey#$uriStr"
-            if (!force && !CoverFeeder.needsCover(covKey)) return
-            val decoded = try {
-                context.contentResolver.openInputStream(android.net.Uri.parse(uriStr))?.use {
-                    android.graphics.BitmapFactory.decodeStream(it)
-                }
-            } catch (_: Throwable) { null }
-            if (decoded != null) {
-                CoverFeeder.feedCover(decoded, covKey, force)
-                decoded.recycle()
-                return
-            }
-        }
-        // 切歌时如果当前曲目还没加载完封面，延时重试等异步网络封面返回
-        if (CoverFeeder.needsCover(tKey)) {
-            val retrySeq = ++coverRetrySeq
-            handler.postDelayed({ if (coverRetrySeq == retrySeq) refresh() }, 600)
-            handler.postDelayed({ if (coverRetrySeq == retrySeq) refresh() }, 1500)
-        } else {
-            CoverFeeder.clearCover()
-        }
-    }
-
     private fun track(mc: MediaController): String {
         val m = mc.metadata
         return listOf(MediaMetadata.METADATA_KEY_MEDIA_ID, MediaMetadata.METADATA_KEY_TITLE,

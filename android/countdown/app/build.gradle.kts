@@ -36,11 +36,11 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.yuminaga.motonav"
+        applicationId = "com.motonav.app.fresh"
         minSdk = 28
         targetSdk = 35
-        versionCode = 181
-        versionName = "8.3.26-single.31"
+        versionCode = 182
+        versionName = "8.3.26-single.32-fresh.1"
         ndk { abiFilters += setOf("arm64-v8a") }
     }
 

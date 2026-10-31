@@ -21,6 +21,7 @@ public final class CarEngineTap {
     private static final Map<String,Method> methods=new HashMap<>();
     private static long errorAt;
     private static long stateAt, positionAt;
+    private static String lastEngineState="";
     private static int routeInfoSequence;
     private static long syncLease(Application app,long now){
         File f=new File(app.getFilesDir(),"car-nav-sync-enabled");
@@ -37,8 +38,9 @@ public final class CarEngineTap {
         return (Application)Class.forName("android.app.ActivityThread").getMethod("currentApplication").invoke(null);
     }
     private static Intent event(Application app,String kind){return new Intent(ACTION).setPackage(app.getPackageName())
-        .putExtra("at",SystemClock.elapsedRealtime()).putExtra("kind",kind);}
-    private static void emit(Application app,Intent i){app.sendBroadcast(i,"com.yuminaga.motonav.permission.CAR_GUIDANCE");}
+        .putExtra("at",SystemClock.elapsedRealtime()).putExtra("kind",kind)
+        .putExtra("providerProcess",Application.getProcessName());}
+    private static void emit(Application app,Intent i){app.sendBroadcast(i,"com.motonav.app.fresh.permission.CAR_GUIDANCE");}
     private static Object call(Object o,String name) throws Exception {
         String key=o.getClass().getName()+"#"+name;
         Method m=methods.get(key);
@@ -76,7 +78,7 @@ public final class CarEngineTap {
                     {"cameraType","getCameraType"},{"cameraSpeed","getCameraSpeed"},{"speedLimit","getLimitedSpeed"}};
                 for(String[] f:fields)try{i.putExtra(f[0],(int)number(g,f[1]));}catch(Exception ignored){}
             }
-            app.sendBroadcast(i,"com.yuminaga.motonav.permission.CAR_GUIDANCE");
+            app.sendBroadcast(i,"com.motonav.app.fresh.permission.CAR_GUIDANCE");
         } catch(Throwable e) {
             long t=SystemClock.elapsedRealtime();
             if(t-errorAt>10000){errorAt=t;Log.w("MotoNavCarTap","guide adapter: "+e.getClass().getSimpleName());}
@@ -84,6 +86,7 @@ public final class CarEngineTap {
     }
     /** Runs only in the original provider process; JNI is never loaded in :motonav. */
     public static synchronized void engineState(Application app){
+        if(!app.getPackageName().equals(Application.getProcessName()))return;
         long now=SystemClock.elapsedRealtime();if(now-stateAt<1000)return;
         // Terminal commands must be consumed even after MotoNav releases ownership.
         NativeRouteBridge.applySimulationCommand(app);
@@ -103,6 +106,11 @@ public final class CarEngineTap {
             Class<?> c=Class.forName("com.autonavi.amapauto.jni.AndroidDriveNavigation");
             boolean real=Boolean.TRUE.equals(c.getMethod("isInNavi").invoke(null));
             boolean sim=Boolean.TRUE.equals(c.getMethod("isInSimulateNavi").invoke(null));
+            String actual=real+":"+sim;
+            if(!actual.equals(lastEngineState)){
+                lastEngineState=actual;
+                Log.i("MotoNavCarTap","native-engine process="+Application.getProcessName()+" real="+real+" simulation="+sim);
+            }
             if(syncToken>0)emit(app,event(app,"engine").putExtra("syncToken",syncToken)
                 .putExtra("real",real).putExtra("simulation",sim));
             if(probe){

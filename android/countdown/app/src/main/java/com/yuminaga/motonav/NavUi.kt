@@ -25,9 +25,9 @@ import kotlin.math.sin
  * - LaneView：车道指示
  */
 object NavStyle {
-    val BG = Color.parseColor("#0E0A14")
-    val CARD = Color.parseColor("#F21A1424")        // 浮在地图上的卡片（略透明）
-    val CARD_SOLID = Color.parseColor("#1A1424")
+    val BG = Color.parseColor("#0C0A11")
+    val CARD = Color.parseColor("#F216131D")        // 浮在地图上的卡片（略透明）
+    val CARD_SOLID = Color.parseColor("#16131D")
     val CARD2 = Color.parseColor("#251C33")
     val STROKE = Color.parseColor("#3A2E4C")
     val TEXT = Color.parseColor("#F3EEF8")

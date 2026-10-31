@@ -11,6 +11,10 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.NotificationCompat
 
 /**
@@ -28,12 +32,24 @@ class NavService : Service() {
 
         fun updateWakeLock() {
             val s = instance ?: return
-            val shouldHold = NavigationUi.active()
+            // Cruise is intentionally excluded from NavigationUi.active(). Arrival
+            // retains the single-engine result page but no longer needs CPU time.
+            val guidance = if (SingleEngineSession.owns)
+                !SingleEngineSession.choosing && !SingleEngineSession.arrived
+                else NavigationUi.active()
+            val shouldHold = guidance || NaviBridge.cruising
+            ProviderConnection.update(s,(SingleEngineSession.owns && !SingleEngineSession.arrived) ||
+                WebMotorGuide.active || CarNavSync.requested)
             val wl = s.wakeLock ?: return
-            if (shouldHold && !wl.isHeld) {
-                try { wl.acquire(6 * 60 * 60 * 1000L) } catch (_: Exception) {}
+            val now = SystemClock.elapsedRealtime()
+            if (shouldHold && (!wl.isHeld || now >= s.wakeRenewAt)) {
+                try {
+                    wl.acquire(6 * 60 * 60 * 1000L)
+                    s.wakeRenewAt = now + 5 * 60 * 60 * 1000L
+                } catch (e: RuntimeException) { Log.w("MotoNavPower", "Wake lock unavailable", e) }
             } else if (!shouldHold && wl.isHeld) {
                 try { wl.release() } catch (_: Exception) {}
+                s.wakeRenewAt = 0L
             }
         }
 
@@ -48,19 +64,15 @@ class NavService : Service() {
     }
 
     private var wakeLock: PowerManager.WakeLock? = null
-    private var bgLocationClient: com.amap.api.location.AMapLocationClient? = null
-
-    private fun bindAmapBackgroundLocation(notif: Notification) {
-        try {
-            val client = com.amap.api.location.AMapLocationClient(applicationContext)
-            client.enableBackgroundLocation(NOTIFY_ID, notif)
-            bgLocationClient = client
-            android.util.Log.i("NavService", "AMap background location enabled")
-        } catch (t: Throwable) {
-            android.util.Log.w("NavService", "enableBackgroundLocation failed: ${t.message}")
+    private var wakeRenewAt = 0L
+    private val powerHandler = Handler(Looper.getMainLooper())
+    private val powerCheck = object : Runnable {
+        override fun run() {
+            if (instance !== this@NavService) return
+            updateWakeLock()
+            powerHandler.postDelayed(this, 30_000L)
         }
     }
-
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -69,16 +81,14 @@ class NavService : Service() {
         CrashLog.install(this)            // v5.5 闪退记录
         createChannel()
         try {
-            val notif = buildNotification()
             if (Build.VERSION.SDK_INT >= 29) {
                 startForeground(
-                    NOTIFY_ID, notif,
+                    NOTIFY_ID, buildNotification(),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
                 )
             } else {
-                startForeground(NOTIFY_ID, notif)
+                startForeground(NOTIFY_ID, buildNotification())
             }
-            bindAmapBackgroundLocation(notif)
         } catch (e: Exception) {
             // 权限还没给全时会走到这里：先停掉，授权后再启动
             BleLink.status = "后台服务启动失败，请先点「1. 授予权限」：${e.message}"
@@ -94,6 +104,9 @@ class NavService : Service() {
             setReferenceCounted(false)
         }
         updateWakeLock()
+        // Covers navigation lifecycle paths that do not start/stop a ride recorder,
+        // and renews the bounded lock on long journeys. Does not wake an idle CPU.
+        powerHandler.postDelayed(powerCheck, 30_000L)
 
         BleLink.startAuto(this)
         TrafficLightOverlay.start(this)
@@ -109,11 +122,12 @@ class NavService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
 
     override fun onDestroy() {
+        instance = null
+        powerHandler.removeCallbacks(powerCheck)
+        ProviderConnection.release()
         SingleEngineSession.disarm()
         WebMotorGuide.stop()
         RideRecorder.stop()
-        CarNavSync.stop()
-        FusionCarUi.stopService(this)
         AmapCaptureHost.serviceStopped(this)
         running = false
         CallWatcher.stop()                // v5.0
@@ -121,11 +135,6 @@ class NavService : Service() {
         TrafficLightOverlay.stop()
         TrafficPositionMonitor.stop()
         BleLink.stopAuto()
-        try {
-            bgLocationClient?.disableBackgroundLocation(true)
-            bgLocationClient?.onDestroy()
-        } catch (_: Throwable) {}
-        bgLocationClient = null
         try { wakeLock?.release() } catch (_: Exception) {}
         wakeLock = null; instance = null
         super.onDestroy()
@@ -147,7 +156,7 @@ class NavService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_dialog_map)
-            .setContentTitle("MotoNav 导航运行中")
+            .setContentTitle("MotoNav $APP_VERSION 正在运行")
             .setContentText("保持与圆屏的连接，点此打开")
             .setContentIntent(open)
             .setOngoing(true)

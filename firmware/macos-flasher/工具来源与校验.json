@@ -1,0 +1,24 @@
+{
+  "version": "5.6.0",
+  "release": "https://github.com/espressif/esptool/releases/tag/v5.6.0",
+  "tools": [
+    {
+      "arch": "amd64",
+      "archive": "esptool-v5.6.0-macos-amd64.tar.gz",
+      "archiveBytes": 62220422,
+      "archiveSha256": "23921776a7df75f2e6f3ca10a604d74db4661e1b8a0ebb89bdddcd2d26f37055",
+      "toolPath": "esptool-macos-amd64/esptool",
+      "toolSha256": "4dd42149be48880fd066fbf8a0f0ac16d38bfcf652451c6491e2b55bc5722c5e",
+      "members": 7
+    },
+    {
+      "arch": "arm64",
+      "archive": "esptool-v5.6.0-macos-arm64.tar.gz",
+      "archiveBytes": 62934161,
+      "archiveSha256": "08a58829a3f14bb08f2e39f4cad48dcb14b7000384268e7f06689836332d6e25",
+      "toolPath": "esptool-macos-arm64/esptool",
+      "toolSha256": "fe300417054386e8c15f916216924accb05d0132411bfce3b223ad621f0de6d9",
+      "members": 7
+    }
+  ]
+}

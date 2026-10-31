@@ -14,7 +14,7 @@ def java_tool(name):
 names = ['TrafficCountdown', 'TrafficSignalState', 'TrafficJunctionState',
          'TrafficSignalPacket', 'TrafficSignalBatchPacket', 'TrafficSignalPolicy',
          'TrafficSignalWrite', 'TrafficSignalOutputDelay', 'CarSignalAlignment',
-         'RouteAnchorSelector', 'MotorTrack', 'RouteCameraIndex', 'RouteRoadIndex', 'RouteSignalIndex', 'WebRouteAnchors', 'PhoneClockWire', 'MapPoseUpdates', 'DestinationRequestLedger', 'SimulationSpeedPolicy', 'NativeSimulationDisplay', 'SingleEngineLifecycle', 'NativeSignalGeometry', 'SharedRouteComparison', 'ProviderStartup', 'ProviderEngineState', 'ArrivalPolicy', 'AmapBuildings', 'RasterPacket', 'BleSession', 'CoverPacket', 'CrossPacket', 'MediaBitmapCapabilities']
+         'RouteAnchorSelector', 'MotorTrack', 'RouteCameraIndex', 'RouteRoadIndex', 'RouteSignalIndex', 'WebRouteAnchors', 'PhoneClockWire', 'MapPoseUpdates', 'DestinationRequestLedger', 'SimulationSpeedPolicy', 'NativeSimulationDisplay', 'SingleEngineLifecycle', 'NativeSignalGeometry', 'SharedRouteComparison', 'ProviderStartup', 'ProviderEngineState', 'ArrivalPolicy']
 tests = sorted(set((root / 'tests').glob('Test*.java')) | set((root / 'tests').glob('*Test.java')))
 subprocess.run([java_tool('javac'), '-encoding', 'UTF-8', '-d', str(output),
                 *[str(source / (name + '.java')) for name in names],

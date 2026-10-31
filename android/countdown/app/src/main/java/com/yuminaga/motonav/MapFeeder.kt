@@ -23,7 +23,7 @@ import kotlin.math.sqrt
  * - v4.8 清爽模式 "#w,1/0"（小地图保留，去掉红绿灯、电子眼、安全提示、测速牌和行程信息，配合固件 v4.9）
  * - v4.5 原路线（导入的高德分享路线）：大块数据类型 4，圆屏画成橙色细线；"#o" 不显示（配合固件 v4.4）
  * - v5.9 风格扩到 11 种（"#t,0~10"），弯道急缓上色 "#Q,1/0"（v6.1 修正，原来误用 #q；配合固件 v6.2）。
- * - v6.1 圆屏方向 "#R,0~3"（0°/90°/90°/270°）
+ * - v6.1 圆屏方向 "#R,0~3"（0°/90°/180°/270°）
  * - v6.3 圆屏方向任意角度 "#D角度"（配合固件 v6.4），同时照发 "#R" 给旧固件
  * - v7.2 预判提前量 "#L毫秒"（配合固件 v6.7）
  * - v8.0 路程进度条开关 "#M1" / "#M0"（配合固件 v7.3；默认开）；v8.1 固件 v7.4 起改成最外圈的行程环
@@ -99,14 +99,9 @@ object MapFeeder {
     private var chunkCy = 0.0
     private var haveChunk = false
     @Volatile private var fetching = false
-    @Volatile private var capturing = false
     private var lastFetchFail = 0L
     private var chunkId = 0
     private var chunkBytes: ByteArray? = null
-    private var chunkSentPlainBytes: ByteArray? = null
-    private var confirmedRasterBytes: ByteArray? = null
-    private var pendingBuildingBytes: ByteArray? = null
-    private var lastWireBytes = 0
     private var chunkAcked = false
     private var chunkSentAt = 0L
     private var chunkDeliveryId = -1
@@ -135,14 +130,10 @@ object MapFeeder {
     }
     fun onBuildingCapability() {
         if(source!=SRC_AMAP || routeOnly())return
-        clearOfflineRoute();requestSerial++;fetching=false;capturing=false
-        haveChunk=false;haveConfirmedChunk=false;confirmedRasterBytes=null;chunkSentPlainBytes=null;pendingBuildingBytes=null;lastFetchFail=0L
+        clearOfflineRoute();requestSerial++;fetching=false
+        haveChunk=false;lastFetchFail=0L
         val context=ctx
         if(context!=null && preparedRouteCoords.size>=2)prepareRoute(context,preparedRouteKey,preparedRouteCoords)
-    }
-    fun onZmapCapability() {
-        if (!enabled || routeOnly()) return
-        if (haveChunk && !chunkAcked && chunkType == TYPE_RASTER) sendChunk()
     }
     private var routeProgress = -1.0
     fun offlineStatus(): String {
@@ -171,7 +162,7 @@ object MapFeeder {
             val plan=RouteMapPlan(xy)
             offlineKey=key
             offlineMaps=RouteOfflineMaps(context.applicationContext,f,plan,
-                foregroundBusy={ capturing || !enabled }, onReady={ node ->
+                foregroundBusy={ fetching || !enabled }, onReady={ node ->
                     handler.post {
                         if (offlineKey!=key || offlineMaps?.plan!==plan || !enabled || routeOnly() || fetching || (haveChunk && !chunkAcked)) return@post
                         val progress=if (havePose) plan.progress(poseX,poseY,routeProgress) else 0.0
@@ -207,8 +198,7 @@ object MapFeeder {
 
     private fun measuredPreparationSeconds(): Double {
         val rate = BleLink.lastRateKBs.takeIf { it > 0 } ?: 12.0
-        val wireSize = lastWireBytes.takeIf { it > 0 } ?: (chunkBaseBytes?.size ?: 64_000)
-        val transfer = wireSize / 1024.0 / rate
+        val transfer = (chunkBaseBytes?.size ?: 64_000) / 1024.0 / rate
         return baseBuildSeconds + maxOf(transfer, baseDeliverySeconds)
     }
 
@@ -359,8 +349,8 @@ object MapFeeder {
         if (oldTheme != theme || wasSat != satMode() || wasRouteOnly != routeOnly()) {
             clearOfflineRoute()
             requestSerial++ // In-flight captures/results must never install an old basemap.
-            fetching = false; capturing = false
-            haveChunk = false; haveConfirmedChunk = false; confirmedRasterBytes = null; chunkSentPlainBytes = null; pendingBuildingBytes = null; lastFetchFail = 0L
+            fetching = false
+            haveChunk = false; haveConfirmedChunk = false; lastFetchFail = 0L
             chunkBytes = null; chunkBaseBytes = null; chunkAcked = true
             BleLink.cancelBulk(TYPE_CHUNK, TYPE_RASTER)
             if (routeOnly()) {
@@ -389,17 +379,17 @@ object MapFeeder {
         source = MapProviderPolicy.normalize(src)
         AmapCaptureHost.refresh()
         requestSerial++
-        fetching = false; capturing = false
+        fetching = false
         ctx?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.putInt("map_src", source)?.apply()
-        handler.post { haveChunk = false; haveConfirmedChunk = false; confirmedRasterBytes = null; chunkSentPlainBytes = null; pendingBuildingBytes = null; lastFetchFail = 0L }      // 下次定位时按新来源重新下载
+        handler.post { haveChunk = false; lastFetchFail = 0L }      // 下次定位时按新来源重新下载
     }
 
     /** v6.2 在 App 里改了 key：马上按新 key 重新下载地图（不用等 15 秒的失败冷却） */
     fun onKeysChanged() {
         clearOfflineRoute()
         requestSerial++
-        fetching = false; capturing = false
-        handler.post { haveChunk = false; haveConfirmedChunk = false; confirmedRasterBytes = null; chunkSentPlainBytes = null; pendingBuildingBytes = null; lastFetchFail = 0L }
+        fetching = false
+        handler.post { haveChunk = false; lastFetchFail = 0L }
     }
 
     fun sourceName() = "高德"
@@ -483,9 +473,6 @@ object MapFeeder {
     private fun fetchChunk(f: MapGeo.Frame, cx: Double, cy: Double, offlineNode: RouteMapPlan.Node? = null) {
         if (routeOnly() || !enabled) return
         fetching = true
-        pendingBuildingBytes = null
-        val reqCx = if (offlineNode != null) cx else Math.rint(cx / 2.0) * 2.0
-        val reqCy = if (offlineNode != null) cy else Math.rint(cy / 2.0) * 2.0
         val startedAt = now()
         val serial = ++requestSerial
         status = "正在下载附近地图…"
@@ -504,79 +491,29 @@ object MapFeeder {
             var err = ""
             var info = ""
             var preparedBase: ByteArray? = null
-            var earlyBaseSent = false
             // 0. v5.9 卫星图
             if (sat && c != null) {
-                capturing = true
                 try {
-                    val r = AmapSdkRaster.build(f,reqCx,reqCy,SAT_HALF,shouldCancel={ serial!=requestSerial || routeOnly() },satellite=true)
+                    val r = AmapSdkRaster.build(f,cx,cy,SAT_HALF,shouldCancel={ serial!=requestSerial || routeOnly() },satellite=true)
                     bytes = r.bytes; type = TYPE_RASTER
                     if (r.previewRaw!=null) { previewRaw = r.previewRaw; previewCls = r.previewCls; previewVer++ }
                     info = "高德卫星图 SDK 截图，${r.bytes.size / 1024} KB"
                 } catch (e: Exception) {
                     err = "卫星图：" + (e.message ?: e.javaClass.simpleName)
-                } finally {
-                    capturing = false
                 }
             }
             // 1. 高德普通底图
             if (serial == requestSerial && !routeOnly() && bytes == null && src == SRC_AMAP && c != null && !sat) {
                 try {
                     val cached=if (offlineNode!=null) offline?.read(offlineNode) ?: offline?.readBase(offlineNode) else null
-                    val r = if (cached!=null) RasterResult(cached,0,0,null,null) else {
-                        capturing = true
-                        try {
-                            AmapSdkRaster.build(f,reqCx,reqCy,rasterHalf,makePreview=true,
-                                shouldCancel={ serial!=requestSerial },includeBuildings=buildingMode(),style=style,
-                                onBaseReady=if (buildingMode()) { baseBytesRaw ->
-                                    earlyBaseSent = true
-                                    val carriedBase = BuildingContinuity.merge(baseBytesRaw, knownBuildings)
-                                    val baseBytes = carriedBase.bytes
-                                    preparedBase = baseBytes
-                                    val buildSeconds = (now() - startedAt) / 1000.0
-                                    handler.post {
-                                        if (serial != requestSerial || src != source || sat != satMode() || routeOnly()) return@post
-                                        baseBuildSeconds = buildSeconds.coerceIn(0.2, 60.0)
-                                        baseInstalledSerial = serial
-                                        haveChunk = true; chunkSat = false
-                                        chunkCx = reqCx; chunkCy = reqCy; chunkType = TYPE_RASTER
-                                        chunkHalf = rasterHalf
-                                        chunkBaseBytes = baseBytes; chunkBytes = baseBytes
-                                        chunkBuildingsComplete = carriedBase.complete
-                                        chunkId = (chunkId + 1) and 0xFF; chunkAcked = false
-                                        chunkInfo = "地图块 #$chunkId：${themeName(style)} · 高德普通底图，${baseBytes.size / 1024} KB，覆盖 2.4 公里，2 米/像素" + (if(carriedBase.retained>0) "（保留重叠楼块）" else "")
-                                        status = "普通底图已生成，正在传到圆屏"
-                                        sendChunk()
-                                    }
-                                } else null)
-                        } finally {
-                            capturing = false
-                        }
-                    }
+                    val r = if (cached!=null) RasterResult(cached,0,0,null,null) else
+                        AmapSdkRaster.build(f,cx,cy,rasterHalf,makePreview=true,
+                            shouldCancel={ serial!=requestSerial },includeBuildings=buildingMode(),style=style)
                     // 缓存只保存这块真正完整的取图；旧楼块拼到普通图不冒充完成。
                     if (offlineNode!=null && cached==null) try { offline?.store(offlineNode,r.bytes) } catch (_: Exception) { }
-                    if (earlyBaseSent) {
-                        val fullBytes = r.bytes
-                        if (r.previewRaw!=null) { previewRaw = r.previewRaw; previewCls = r.previewCls; previewVer++ }
-                        if (RasterPacket.isBuilding(fullBytes)) {
-                            handler.post {
-                                if (serial != requestSerial || src != source || sat != satMode() || routeOnly()) return@post
-                                chunkBaseBytes = fullBytes
-                                chunkBuildingsComplete = true
-                                if (chunkAcked) {
-                                    chunkBytes = fullBytes
-                                    chunkId = (chunkId + 1) and 0xFF; chunkAcked = false
-                                    chunkInfo = "地图块 #$chunkId：${themeName(style)} · 高德楼块底图，${fullBytes.size / 1024} KB，覆盖 2.4 公里，2 米/像素"
-                                    status = "楼块底图已生成，正在增量同步到圆屏"
-                                    sendChunk()
-                                } else {
-                                    pendingBuildingBytes = fullBytes
-                                }
-                            }
-                        }
-                    } else {
-                        val carried=if(src==SRC_AMAP && buildingMode())BuildingContinuity.merge(r.bytes,knownBuildings)else null
-                        val base=carried?.bytes ?: r.bytes
+                    val carried=if(src==SRC_AMAP && buildingMode())BuildingContinuity.merge(r.bytes,knownBuildings)else null
+                    val base=carried?.bytes ?: r.bytes
+                    run {
                         preparedBase = base
                         val buildSeconds = (now() - startedAt) / 1000.0
                         handler.post {
@@ -584,7 +521,7 @@ object MapFeeder {
                             baseBuildSeconds = buildSeconds.coerceIn(0.2, 60.0)
                             baseInstalledSerial = serial
                             haveChunk = true; chunkSat = false
-                            chunkCx = reqCx; chunkCy = reqCy; chunkType = TYPE_RASTER
+                            chunkCx = cx; chunkCy = cy; chunkType = TYPE_RASTER
                             chunkHalf = rasterHalf
                             chunkBaseBytes = base; chunkBytes = base
                             chunkBuildingsComplete=carried?.complete ?: RasterPacket.isBuilding(base)
@@ -607,7 +544,7 @@ object MapFeeder {
                 if (serial != requestSerial || src != source || sat != satMode() || routeOnly()) return@post
                 fetching = false
                 if (baseInstalledSerial==serial) {
-                    if (chunkAcked && pendingBuildingBytes == null) status="圆屏已收到普通底图"
+                    if (chunkAcked) status="圆屏已收到普通底图"
                     return@post
                 }
                 val b = bytes
@@ -618,8 +555,8 @@ object MapFeeder {
                 }
                 haveChunk = true
                 chunkSat = sat && info.startsWith("高德卫星图")
-                chunkCx = reqCx
-                chunkCy = reqCy
+                chunkCx = cx
+                chunkCy = cy
                 chunkId = (chunkId + 1) and 0xFF
                 chunkBytes = b
                 chunkBaseBytes = b
@@ -633,7 +570,6 @@ object MapFeeder {
                 sendChunk()
             }
           } catch (_: OutOfMemoryError) {
-            capturing = false
             handler.post { if (serial == requestSerial && !routeOnly()) { fetching=false; lastFetchFail=now(); status="手机内存不足，保留圆屏当前底图，稍后重试" } }
           }
         }
@@ -644,13 +580,7 @@ object MapFeeder {
         if (!enabled || routeOnly()) return
         chunkSentAt = now()
         if (chunkDeliveryId != chunkId) { chunkDeliveryId = chunkId; chunkDeliveryStart = chunkSentAt }
-        val plain = if (chunkType == TYPE_RASTER && !buildingMode()) RasterPacket.forLegacy(b) else b
-        chunkSentPlainBytes = plain
-        val wire = if (chunkType == TYPE_RASTER) {
-            RasterPacket.forWire(plain, if (haveConfirmedChunk && !confirmedSat && !chunkSat) confirmedRasterBytes else null, buildingMode(), BleLink.zmapSupported)
-        } else plain
-        lastWireBytes = wire.size
-        BleLink.sendBulk(chunkType, chunkId, wire)
+        BleLink.sendBulk(chunkType, chunkId, if(chunkType==TYPE_RASTER && !buildingMode()) RasterPacket.forLegacy(b) else b)
     }
 
     // ================= 路线 =================
@@ -730,20 +660,6 @@ object MapFeeder {
                 chunkAcked = true
                 haveConfirmedChunk = true; confirmedCx = chunkCx; confirmedCy = chunkCy; confirmedSat = chunkSat
                 confirmedHalf = chunkHalf
-                if (type == TYPE_RASTER) confirmedRasterBytes = chunkSentPlainBytes
-                val pendingBld = pendingBuildingBytes
-                if (pendingBld != null) {
-                    pendingBuildingBytes = null
-                    chunkBytes = pendingBld
-                    chunkBaseBytes = pendingBld
-                    chunkBuildingsComplete = true
-                    chunkId = (chunkId + 1) and 0xFF
-                    chunkAcked = false
-                    chunkInfo = "地图块 #$chunkId：${themeName(theme)} · 高德楼块底图，${pendingBld.size / 1024} KB，覆盖 2.4 公里，2 米/像素"
-                    status = "普通底图已确认，正在增量同步楼块"
-                    sendChunk()
-                    return@post
-                }
                 status = "圆屏已收到普通底图"
                 // 规划页停车等待时也能接着准备起点底图，不依赖下一次行驶定位。
                 val maps=offlineMaps
@@ -762,18 +678,6 @@ object MapFeeder {
         }
     }
 
-    /** 圆屏回复 "N,类型,编号"：增量差分参考不匹配，清除参考底图并立刻重发全量压缩底图 */
-    fun onNack(type: Int, id: Int) {
-        handler.post {
-            if (!routeOnly() && type == chunkType && id == chunkId) {
-                haveConfirmedChunk = false
-                confirmedRasterBytes = null
-                chunkAcked = false
-                sendChunk()
-            }
-        }
-    }
-
     /** 蓝牙重新连上：圆屏可能重启过，全部重发 */
     fun onLinkReady() {
         BleLink.sendEvent("#GB?")
@@ -789,7 +693,6 @@ object MapFeeder {
             BleLink.send(if (progress) "#M1" else "#M0")  // v8.0 路程进度条（固件 v7.3）
             nightSent = -1; applyNight()                 // v2.8 夜间配色
             haveConfirmedChunk = false
-            confirmedRasterBytes = null
             chunkDeliveryId = -1
             chunkAcked = false; routeAcked = false; ghostAcked = false
             sendChunk(); sendRoute(); sendGhost()
@@ -798,11 +701,7 @@ object MapFeeder {
 
     private fun checkResend() {
         if (!BleLink.isConnected || BleLink.bulkPending()) return
-        if (chunkBytes != null && !chunkAcked && now() - chunkSentAt > RESEND_MS) {
-            haveConfirmedChunk = false
-            confirmedRasterBytes = null
-            sendChunk()
-        }
+        if (chunkBytes != null && !chunkAcked && now() - chunkSentAt > RESEND_MS) sendChunk()
         if (routeBytes != null && !routeAcked && now() - routeSentAt > RESEND_MS) sendRoute()
         if (ghostBytes != null && !ghostAcked && now() - ghostSentAt > RESEND_MS) sendGhost()
     }
@@ -817,7 +716,7 @@ object MapFeeder {
         lastFetchFail>0 && (status.contains("失败") || status.contains("内存不足")),haveConfirmedChunk && chunkAcked)
 
     fun infoText(): String =
-        if (!enabled) "已关闭" else if (routeOnly()) "龙珠雷达：绿色网格，无底图下载与传输\n$routeInfo${if (routeAcked) "（圆屏已确认）" else ""}" else "来源：${sourceName()}　$status\n$chunkInfo${if (lastWireBytes > 0) "（传输 ${maxOf(1, lastWireBytes / 1024)} KB）" else ""}${if (chunkAcked) "（圆屏已确认）" else ""}\n" +
+        if (!enabled) "已关闭" else if (routeOnly()) "龙珠雷达：绿色网格，无底图下载与传输\n$routeInfo${if (routeAcked) "（圆屏已确认）" else ""}" else "来源：${sourceName()}　$status\n$chunkInfo${if (chunkAcked) "（圆屏已确认）" else ""}\n" +
             "$routeInfo${if (routeAcked) "（圆屏已确认）" else ""}\n" + offlineStatus() + "\n" + coverageInfo()
 
     private fun coverageInfo(): String {

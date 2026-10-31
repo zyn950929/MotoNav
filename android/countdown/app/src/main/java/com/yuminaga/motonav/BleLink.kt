@@ -57,8 +57,6 @@ object BleLink {
     private val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     private const val BULK_HEADER = 15
 
-    private const val RETRY_MS = 5000L
-    private const val SCAN_TIMEOUT_MS = 15000L
     private const val PREFER_MS = 4000L          // v7.8 先等上次那块圆屏这么久
     private const val HEARTBEAT_MS = 2000L
     private const val MAX_WRITE = 500          // 圆屏单个数据包最多收 512 字节，留点余量
@@ -96,11 +94,10 @@ object BleLink {
         val old = gatt
         gatt = null
         old?.let { session.clear(it) }
-        ready = false; verified = false; buildingsSupported = false; zmapSupported = false
-        mediaBitmaps.reset()
+        ready = false; verified = false; buildingsSupported = false
         capabilityQuerySent = false; rxChar = null; mtu = 23
         phyText = "?"; burstStart = 0L
-        synchronized(lock) { inFlight = 0; ctrlQueue.clear(); imgQueue.clear(); bulkQ.clear() }
+        synchronized(lock) { writing = false; queue.clear(); bulkQ.clear() }
         try { old?.disconnect() } catch (_: Exception) {}
         try { old?.close() } catch (_: Exception) {}
     }
@@ -121,13 +118,12 @@ object BleLink {
     @Volatile var mtu = 23
     @Volatile private var ready = false        // 服务和大数据包都协商好了，可以发送
 
-    // ---- 发送队列（v2 多通道优先级与并发流水线） ----
+    // ---- 发送队列 ----
     private class Out(val key: String?, var data: ByteArray, val signal: TrafficSignalWrite? = null, val expiry: Long = Long.MAX_VALUE)
     private val lock = Any()
-    private val ctrlQueue = ArrayDeque<Out>()           // 高优先级：HUD控制指令、高频短报文
-    private val imgQueue = ArrayDeque<Out>()            // 中优先级：文字图片分片通道
+    private val queue = ArrayDeque<Out>()
     private class BulkPkt(val type: Int, val data: ByteArray)
-    private val bulkQ = ArrayDeque<BulkPkt>()          // 低优先级：v2.0 大块底图/路线数据
+    private val bulkQ = ArrayDeque<BulkPkt>()          // v2.0 大块数据
     @Volatile var bulkSentKB = 0
     // v4.6 传输速度统计：一批大块数据从开始发到发完，算平均速度
     @Volatile var phyText = "?"                       // 蓝牙模式：1M / 2M
@@ -137,14 +133,12 @@ object BleLink {
     private var burstStart = 0L
     private var burstBytes = 0L
     @Volatile var buildingsSupported = false
-    @Volatile var zmapSupported = false
     @Volatile var screenStats = ""                    // v2.0.1 圆屏发来的帧率统计
     @Volatile var screenProf = ""                     // v5.8 每帧各步骤用时
     @Volatile var screenFps = ""                      // v2.6 给新界面用：帧率、屏幕速度、快速刷屏
     @Volatile var screenMhz = -1
     @Volatile var screenFast = -1
-    private var inFlight = 0
-    private const val MAX_IN_FLIGHT = 2
+    private var writing = false
     private var writeStartedAt = 0L
     private var lastWriteAt = 0L
 
@@ -246,6 +240,10 @@ object BleLink {
 
     fun resetScanBackoff() {
         scanRetryCount = 0
+        if (auto && !scanning && gatt == null) {
+            handler.removeCallbacks(retryRunnable)
+            handler.post(retryRunnable)
+        }
     }
 
     private val retryRunnable = Runnable { appContext?.let { connect(it) } }
@@ -253,7 +251,7 @@ object BleLink {
     private fun scheduleRetry() {
         if (!auto) return
         handler.removeCallbacks(retryRunnable)
-        scanRetryCount++
+        scanRetryCount = (scanRetryCount + 1).coerceAtMost(4)
         // 指数退避 (Exponential Backoff)：5s -> 15s -> 30s -> 60s，未通电待机时大幅节省手机电量
         val delay = when {
             scanRetryCount <= 1 -> 5000L
@@ -308,7 +306,6 @@ object BleLink {
 
     private fun connectDevice(device: BluetoothDevice, name: String) {
         stopScan()
-        scanRetryCount = 0
         candidate = null
         handler.removeCallbacks(retryRunnable)
         screenName = name
@@ -377,11 +374,11 @@ object BleLink {
 
     private fun markVerified() {
         if (verified) return
+        scanRetryCount = 0 // Reset after authentication, not every failed connection attempt.
         verified = true; pairHint = ""; staleCount = 0; needUnbond = false
         gatt?.device?.address?.let { saveLast(it); skipAddr = "" }
         trace("authenticated")
         val g = gatt ?: return
-        try { g.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH) } catch (_: Exception) {}
         if (ready) {
             session.move(g, Phase.AUTH, Phase.READY, now(), 0)
             status = "已连接（高速模式，数据包 ${maxWrite()} 字节）"
@@ -390,28 +387,12 @@ object BleLink {
         }
     }
 
-    private val mediaBitmaps = MediaBitmapCapabilities()
-    val coverSupported: Boolean get() = verified && mediaBitmaps.supportsCover()
-    val crossSupported: Boolean get() = verified && mediaBitmaps.supportsCross()
-
     private fun onNotify(bytes: ByteArray?) {
         val msg = bytes?.toString(Charsets.UTF_8)?.trim() ?: return
         if (BleSession.confirms(msg, capabilityQuerySent)) markVerified()
-        if (MediaBitmapCapabilities.isMessage(msg)) {
-            val connection = gatt
-            handler.post {
-                if (connection != null && gatt === connection && session.owns(connection) &&
-                    mediaBitmaps.accept(msg, verified) && msg == "CAP,COVER,1") MusicBridge.refresh(true)
-            }
-            return
-        }
         if(msg=="CAP,HID,1") { handler.post { sendEvent("#HM,0") }; return }
         if(msg=="CAP,BLD,1") {
             handler.post { if(!buildingsSupported) { buildingsSupported=true;MapFeeder.onBuildingCapability() } }
-            return
-        }
-        if(msg=="CAP,ZMAP,1") {
-            handler.post { if(!zmapSupported) { zmapSupported=true;MapFeeder.onZmapCapability() } }
             return
         }
         val p = msg.split(',')
@@ -451,12 +432,6 @@ object BleLink {
             val t = p[1].toIntOrNull() ?: return
             val id = p[2].toIntOrNull() ?: return
             MapFeeder.onAck(t, id)
-            return
-        }
-        if (p.size >= 3 && p[0] == "N") {
-            val t = p[1].toIntOrNull() ?: return
-            val id = p[2].toIntOrNull() ?: return
-            MapFeeder.onNack(t, id)
         }
     }
 
@@ -530,14 +505,12 @@ object BleLink {
             if (c.uuid == TX_UUID) onCurrent(g) { onNotify(copy) }
         }
 
-        override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, st: Int) {
-            if (c.uuid != RX_UUID) return
+        override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, st: Int) = onCurrent(g) {
+            if (c.uuid != RX_UUID) return@onCurrent
             if (st != BluetoothGatt.GATT_SUCCESS) {
-                onCurrent(g) { failConnection(g, "圆屏数据发送失败（$st）") }
-                return
+                failConnection(g, "圆屏数据发送失败（$st）"); return@onCurrent
             }
-            if (gatt !== g || !session.owns(g)) return
-            synchronized(lock) { if (inFlight > 0) inFlight-- }
+            synchronized(lock) { writing = false }
             pump()
         }
     }
@@ -564,13 +537,12 @@ object BleLink {
     private fun resendAll() {
         if (!ready) return
         synchronized(lock) {
-            ctrlQueue.clear()
-            imgQueue.clear()
+            queue.clear()
             bulkQ.clear()
-            inFlight = 0
+            writing = false
             // 亮度放最前面，然后是导航和其他状态
-            lastState["#b"]?.let { enqueue("#b", it.toByteArray(Charsets.UTF_8)) }
-            for ((k, v) in lastState) if (k != "#b") enqueue(k, v.toByteArray(Charsets.UTF_8))
+            lastState["#b"]?.let { enqueue("#b", it.toByteArray()) }
+            for ((k, v) in lastState) if (k != "#b") enqueue(k, v.toByteArray())
             for ((slot, img) in lastImg) enqueueImage(slot, img)
         }
         pump()
@@ -611,7 +583,7 @@ object BleLink {
             }
             if (ready && !verified) { capabilityQuerySent = true; send("#GB?") }
             syncClock(false)
-            val idle = synchronized(lock) { ctrlQueue.isEmpty() && imgQueue.isEmpty() && bulkQ.isEmpty() && inFlight == 0 }
+            val idle = synchronized(lock) { queue.isEmpty() && bulkQ.isEmpty() && !writing }
             if (ready && idle && now() - lastWriteAt > HEARTBEAT_MS - 500) send("P")
             if (auto) handler.postDelayed(this, HEARTBEAT_MS)
         }
@@ -638,7 +610,7 @@ object BleLink {
                 lastState.clear()
                 if (b != null) lastState["#b"] = b
                 lastImg.clear()
-                imgQueue.clear()
+                queue.removeAll { it.key != null && it.key.startsWith("B") }
             }
             if (k != "P" && k != "#GB?") lastState[k] = msg
             enqueue(k, msg.toByteArray(Charsets.UTF_8))
@@ -656,23 +628,23 @@ object BleLink {
     fun sendTrafficLight(packet: TrafficSignalWrite) {
         if (!ready || !verified) return
         synchronized(lock) {
-            ctrlQueue.removeAll { it.key == "TL" }
-            ctrlQueue.addLast(Out("TL", byteArrayOf(), packet))
+            queue.removeAll { it.key == "TL" }
+            queue.addLast(Out("TL", byteArrayOf(), packet))
         }
         pump()
     }
     fun clearTrafficLight() {
         synchronized(lock) {
-            ctrlQueue.removeAll { it.key == "TL" }
-            if(ready && verified) ctrlQueue.addLast(Out("TL", "#TL,0".toByteArray(Charsets.UTF_8), expiry=now()+400))
+            queue.removeAll { it.key == "TL" }
+            if(ready && verified) queue.addLast(Out("TL", "#TL,0".toByteArray(), expiry=now()+400))
         }
         pump()
     }
     // Transient approach frame only; no phase, countdown, persistence or replay.
     fun sendTrafficApproach(id:Int) {
         synchronized(lock) {
-            ctrlQueue.removeAll { it.key == "TLA" }
-            if(ready && verified) ctrlQueue.addLast(Out("TLA", "#TLA,$id,${if(id>0)1500 else 0}".toByteArray(Charsets.UTF_8), expiry=now()+400))
+            queue.removeAll { it.key == "TLA" }
+            if(ready && verified) queue.addLast(Out("TLA", "#TLA,$id,${if(id>0)1500 else 0}".toByteArray(), expiry=now()+400))
         }
         pump()
     }
@@ -681,11 +653,8 @@ object BleLink {
     fun clearWeather() {
         synchronized(lock) {
             lastState.remove("#W"); lastState.remove("#WX")
-            for (slot in listOf(3, 4, 7, 8, 9, 10, 11)) {
-                lastImg.remove(slot)
-                imgQueue.removeAll { it.key != null && it.key.startsWith("B$slot:") }
-            }
-            ctrlQueue.removeAll { it.key == "#W" || it.key == "#WX" }
+            for (slot in listOf(3, 4, 7, 8, 9, 10, 11)) lastImg.remove(slot)
+            queue.removeAll { it.key == "#W" || it.key == "#WX" }
         }
         sendEvent("#WXRESET")
     }
@@ -693,10 +662,6 @@ object BleLink {
     fun sendImage(slot: Int, w: Int, h: Int, data: ByteArray) {
         val img = Img(w, h, data)
         synchronized(lock) {
-            val prev = lastImg[slot]
-            if (prev != null && prev.w == w && prev.h == h && prev.data.contentEquals(data)) {
-                return
-            }
             lastImg[slot] = img
             enqueueImage(slot, img)
         }
@@ -747,15 +712,15 @@ object BleLink {
         if (count<=0) null else (next*100/count).coerceIn(0,99)
     }
 
-    /** 把图片切片放进图片队列（需持有 lock） */
+    /** 把图片切片放进队列（需持有 lock） */
     private fun enqueueImage(slot: Int, img: Img?) {
         // 同一栏还没发出去的旧图片片段全部作废
-        imgQueue.removeAll { it.key != null && it.key.startsWith("B$slot:") }
+        queue.removeAll { it.key != null && it.key.startsWith("B$slot:") }
         if (img == null) return
         val id = (++imgId[slot]) and 0xFF
         val payload = maxWrite() - IMG_HEADER
         if (img.w == 0 || img.data.isEmpty()) {
-            imgQueue.addLast(Out("B$slot:$id:0", header(slot, id, 0, 1, 0, 0, 0)))
+            queue.addLast(Out("B$slot:$id:0", header(slot, id, 0, 1, 0, 0, 0)))
             return
         }
         if (payload < 16) return                       // 没协商到大数据包，就不发图片
@@ -765,7 +730,7 @@ object BleLink {
             val off = p * payload
             val len = minOf(payload, img.data.size - off)
             val pkt = header(slot, id, p, parts, img.w, img.h, off) + img.data.copyOfRange(off, off + len)
-            imgQueue.addLast(Out("B$slot:$id:$p", pkt))
+            queue.addLast(Out("B$slot:$id:$p", pkt))
         }
         imgSentCount++
     }
@@ -777,104 +742,70 @@ object BleLink {
             (off and 0xFF).toByte(), (off shr 8).toByte()
         )
 
-    /** 放进控制队列：同类型的状态消息直接替换原位置的旧消息（需持有 lock） */
+    /** 放进队列：同类型的状态消息直接替换原位置的旧消息（需持有 lock） */
     private fun enqueue(key: String, data: ByteArray) {
-        val existing = ctrlQueue.firstOrNull { it.key == key }
+        val existing = queue.firstOrNull { it.key == key }
         if (existing != null) {
             existing.data = data
         } else {
-            ctrlQueue.addLast(Out(key, data))
+            queue.addLast(Out(key, data))
         }
-        while (ctrlQueue.size > 120) ctrlQueue.removeFirst()
+        while (queue.size > 120) queue.removeFirst()
     }
 
-    /** 如果发送窗口有空位，持续推送队列里的下一条（流水线并发 Burst 机制） */
+    /** 如果空闲，就发队列里的下一条 */
     private fun pump() {
         synchronized(lock) {
             if (!ready) return
-            // 兜底自愈：如果在途超时 1000ms（极罕见系统回调丢失），强制释放管道
-            if (inFlight > 0 && now() - writeStartedAt > 1000) {
-                inFlight = 0
+            val stuck = now() - writeStartedAt > 1000
+            if (writing && !stuck) return
+            queue.removeAll { it.expiry <= now() || it.signal?.expired(now()) == true }
+            // 导航等状态消息优先，空闲时再发地图大块数据
+            val next = if (verified) queue.firstOrNull() else queue.firstOrNull { it.key == "#GB?" || it.key == "P" }
+            if (!verified && next == null) return
+            if (next == null) {
+                val b = bulkQ.firstOrNull() ?: run { writing = false; return }
+                if (writeNow(b.data)) {
+                    bulkQ.removeFirst()
+                    writing = true
+                    writeStartedAt = now()
+                    lastWriteAt = writeStartedAt
+                    // v4.6 速度统计：一批大块数据从第一片到最后一片
+                    if (burstStart == 0L) { burstStart = writeStartedAt; burstBytes = 0L }
+                    burstBytes += b.data.size
+                    if (bulkQ.isEmpty()) {
+                        val dt = (writeStartedAt - burstStart) / 1000.0
+                        if (burstBytes >= 8 * 1024 && dt > 0.05) {
+                            lastRateKBs = burstBytes / 1024.0 / dt
+                            lastBurstKB = (burstBytes / 1024).toInt()
+                            if (lastRateKBs > bestRateKBs) bestRateKBs = lastRateKBs
+                        }
+                        burstStart = 0L
+                    }
+                } else {
+                    writing = false
+                    handler.postDelayed({ pump() }, 30)
+                }
+                return
             }
-
-            while (inFlight < MAX_IN_FLIGHT) {
-                // 1. 清理过期控制包
-                ctrlQueue.removeAll { it.expiry <= now() || it.signal?.expired(now()) == true }
-
-                // 2. 检查控制通道（极高优先级：车速、车道、红绿灯、转向距离等）
-                val nextCtrl = if (verified) ctrlQueue.firstOrNull() else ctrlQueue.firstOrNull { it.key == "#GB?" || it.key == "P" }
-                if (nextCtrl != null) {
-                    val wire = if (nextCtrl.signal != null) {
-                        val encoded = nextCtrl.signal.encode(now())
-                        if (encoded == null) {
-                            ctrlQueue.removeFirst()
-                            continue
-                        }
-                        encoded.toByteArray(Charsets.UTF_8)
-                    } else nextCtrl.data
-
-                    if (writeNow(wire)) {
-                        ctrlQueue.removeFirst()
-                        inFlight++
-                        writeStartedAt = now()
-                        lastWriteAt = writeStartedAt
-                        if (nextCtrl.key != "P" && nextCtrl.key?.startsWith("B") != true) {
-                            sentCount++
-                            lastSentMsg = String(wire, Charsets.UTF_8)
-                            lastSentAt = writeStartedAt
-                        }
-                        continue
-                    } else {
-                        handler.postDelayed({ pump() }, 20)
-                        break
-                    }
+            val wire = if(next.signal != null) {
+                val encoded=next.signal.encode(now())
+                if(encoded==null){queue.removeFirst();handler.post { pump() };return}
+                encoded.toByteArray(Charsets.UTF_8)
+            } else next.data
+            if (writeNow(wire)) {
+                queue.removeFirst()
+                writing = true
+                writeStartedAt = now()
+                lastWriteAt = writeStartedAt
+                if (next.key != "P" && next.key?.startsWith("B") != true) {
+                    sentCount++
+                    lastSentMsg = String(wire, Charsets.UTF_8)
+                    lastSentAt = writeStartedAt
                 }
-
-                if (!verified) break
-
-                // 3. 检查文字图片通道（中优先级：路名、底部栏等）
-                val nextImg = imgQueue.firstOrNull()
-                if (nextImg != null) {
-                    if (writeNow(nextImg.data)) {
-                        imgQueue.removeFirst()
-                        inFlight++
-                        writeStartedAt = now()
-                        lastWriteAt = writeStartedAt
-                        continue
-                    } else {
-                        handler.postDelayed({ pump() }, 20)
-                        break
-                    }
-                }
-
-                // 4. 检查大块底图/路线通道（低优先级）
-                val nextBulk = bulkQ.firstOrNull()
-                if (nextBulk != null) {
-                    if (writeNow(nextBulk.data)) {
-                        bulkQ.removeFirst()
-                        inFlight++
-                        writeStartedAt = now()
-                        lastWriteAt = writeStartedAt
-                        if (burstStart == 0L) { burstStart = writeStartedAt; burstBytes = 0L }
-                        burstBytes += nextBulk.data.size
-                        if (bulkQ.isEmpty()) {
-                            val dt = (writeStartedAt - burstStart) / 1000.0
-                            if (burstBytes >= 2 * 1024 && dt > 0.03) {
-                                lastRateKBs = burstBytes / 1024.0 / dt
-                                lastBurstKB = maxOf(1, (burstBytes / 1024).toInt())
-                                if (lastRateKBs > bestRateKBs) bestRateKBs = lastRateKBs
-                            }
-                            burstStart = 0L
-                        }
-                        continue
-                    } else {
-                        handler.postDelayed({ pump() }, 20)
-                        break
-                    }
-                }
-
-                // 所有通道均空闲
-                break
+            } else {
+                writing = false
+                handler.postDelayed({ pump() }, 30)   // 蓝牙忙，稍后重试
             }
         }
     }
@@ -903,13 +834,13 @@ object BleLink {
     fun statsText(): String {
         if (sentCount == 0) return "还没发送过指令"
         val ago = (now() - lastSentAt) / 1000.0
-        val cq = synchronized(lock) { ctrlQueue.size }
-        val iq = synchronized(lock) { imgQueue.size }
+        val q = synchronized(lock) { queue.size }
         val bq = synchronized(lock) { bulkQ.size }
-        return "已发送 $sentCount 条，文字图片 $imgSentCount 张，队列 控制$cq/图片$iq，地图待发 $bq 片（累计 $bulkSentKB KB）\n" +
+        return "已发送 $sentCount 条，文字图片 $imgSentCount 张，队列 $q，地图待发 $bq 片（累计 $bulkSentKB KB）\n" +
             "最近发送：$lastSentMsg（${"%.1f".format(ago)} 秒前）\n" +
             speedText()
     }
+
     /** v4.6 蓝牙模式和实测传输速度 */
     fun speedText(): String {
         val r = if (lastRateKBs > 0) "最近一批 $lastBurstKB KB，${"%.0f".format(lastRateKBs)} KB/秒（最快 ${"%.0f".format(bestRateKBs)} KB/秒）"

@@ -186,7 +186,7 @@ class MotorWebNavActivity : AppCompatActivity() {
         root.addView(settingsButton,FrameLayout.LayoutParams(dp(46),dp(46),Gravity.TOP or Gravity.END).apply{
             rightMargin=dp(12);topMargin=dp(204)
         })
-        if(packageName=="com.autonavi.amapauto") {
+        if(packageName=="com.motonav.app.fresh") {
             providerButton=circle("车机",S.CYAN).apply{
                 contentDescription="查看车机路口信息，导航继续"
                 setOnClickListener{NavigationUi.openProvider(this@MotorWebNavActivity)}

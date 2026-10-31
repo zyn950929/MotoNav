@@ -50,11 +50,17 @@ with ZipFile(carPath) as car,ZipFile(motoPath) as moto,ZipFile(root/'car-code.ap
             if name.startswith('kotlin/') and name.endswith('.kotlin_builtins'):continue
             b=car.read(name)
             if name=='lib/arm64-v8a/libautonavi.so':b=manual_preview(b)
+            if name=='lib/arm64-v8a/libhsl.so':
+                original=b'/data/data/com.autonavi.amapauto'
+                replacement=b'/data/data/com.motonav.app.fresh'
+                assert len(original)==len(replacement) and b.count(original)==1
+                b=b.replace(original,replacement)
             if name.startswith('res/') and name.endswith('.xml'):b=car_names(b)
             add(name,b,info)
         for info in moto.infolist():
             name=info.filename
             if name=='AndroidManifest.xml' or name=='resources.arsc' or name.startswith('META-INF/') or re.fullmatch(r'classes\d*\.dex',name):continue
+            if name in ('assets/dexopt/baseline.prof','assets/dexopt/baseline.profm'):continue
             b=moto.read(name);dest='res/motonav/'+name[4:] if name.startswith('res/') else name
             if name.endswith('.so'):
                 hits=b.count(old);b=b.replace(old,new)
@@ -76,7 +82,7 @@ out.replace(root/'fusion-unsigned.apk')
 out=root/'fusion-unsigned.apk'
 summary={'bytes':out.stat().st_size,'definedClasses':len(defined),'dexFiles':len(dexes),'duplicateClasses':0,
  'resourceMerge':resourceInfo,'verifiedFileResourceReferences':checked,'motoNativeIsolation':native,
- 'installedPackage':'com.autonavi.amapauto','motoProcess':':motonav','packageCount':1,
+ 'installedPackage':'com.motonav.app.fresh','motoProcess':':motonav','packageCount':1,
  'testedOnDevice':False,'noRouteCruiseCountdownVerified':False,
  'routePreviewManualStartOnly':{'library':'libautonavi.so','offset':'0xd612c0','bytesChanged':4,'originalHashChecked':True}}
 (root/'merge-checks.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2),'utf8')

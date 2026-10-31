@@ -102,7 +102,11 @@ class SingleEngineActivity:AppCompatActivity(){
         state=text(11f,s.SUB).apply{
             setPadding(0,dp(7),0,0)
             setOnClickListener{AlertDialog.Builder(this@SingleEngineActivity).setTitle("导航状态").setMessage(SingleEngineSession.status+"\n"+MapFeeder.loadingStatus()).setPositiveButton("知道了",null).show()}
-            setOnLongClickListener{AlertDialog.Builder(this@SingleEngineActivity).setTitle("单引擎验证").setMessage(SingleEngineSession.debug().toString(2)).setPositiveButton("关闭",null).show();true}
+            // 原始调试数据只在开发者选项打开时长按可看
+            setOnLongClickListener{
+                if(!getSharedPreferences("ui",MODE_PRIVATE).getBoolean("dev_mode",false))return@setOnLongClickListener false
+                AlertDialog.Builder(this@SingleEngineActivity).setTitle("单引擎验证").setMessage(SingleEngineSession.debug().toString(2)).setPositiveButton("关闭",null).show();true
+            }
         }
         head.addView(state)
         viaSummary=control("添加途经点（最多3个）"){
@@ -137,7 +141,7 @@ class SingleEngineActivity:AppCompatActivity(){
         foot.addView(speedRow,LinearLayout.LayoutParams(-1,-2).apply{bottomMargin=dp(6)})
         startChoice=control("开始导航"){
             beginChoice(false)
-        }
+        }.apply{background=s.gradient(this@SingleEngineActivity,12f);setTextColor(Color.WHITE);typeface=s.BOLD}
         simulateChoice=control("模拟导航"){
             beginChoice(true)
         }

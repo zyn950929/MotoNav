@@ -151,7 +151,7 @@ class NavActivity : ComponentActivity() {
         root.addView(settingsBtn,FrameLayout.LayoutParams(dp(46),dp(46),Gravity.TOP or Gravity.END).apply {
             rightMargin=dp(12);topMargin=dp(160)
         })
-        if(packageName=="com.autonavi.amapauto") {
+        if(packageName=="com.motonav.app.fresh") {
             providerBtn=circleBtn("车机",12f,S.CYAN).apply {
                 contentDescription="查看车机路口信息，导航继续"
                 setOnClickListener{NavigationUi.openProvider(this@NavActivity)}

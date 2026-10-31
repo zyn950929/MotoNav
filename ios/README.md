@@ -35,7 +35,9 @@
 
 ## 获取安装包与从源码构建
 
-在 [iOS 构建工作流](https://github.com/zyn950929/MotoNav/actions/workflows/release-ios.yml) 的成功运行中下载 `MotoNav-iOS-0.16.0-Build12` 构建产物。IPA 仍需自行签名；历史 Release 的版本以其实际标签为准。
+直接下载：[Build12 未签名 IPA](https://github.com/zyn950929/MotoNav/releases/download/motonav-2026.11.01/MotoNav-0.16.0-build12-unsigned.ipa)。使用自己的 Apple 账号通过 Sideloadly 等工具签名安装；免费账号通常每 7 天需要重新签名，不能直接点击 IPA 安装。高德 iOS Key 对应最终实际 Bundle ID。
+
+也可在 [iOS 构建工作流](https://github.com/zyn950929/MotoNav/actions/workflows/release-ios.yml) 的成功运行中下载 `MotoNav-iOS-0.16.0-Build12` 构建产物。IPA 仍需自行签名；历史 Release 的版本以其实际标签为准。
 
 Mac 安装 Xcode 与 CocoaPods 1.16.2 后，在仓库根目录运行：
 

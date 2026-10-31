@@ -114,7 +114,7 @@ public final class NativeRouteBridge {
         Log.i("MotoNavNativeRoute",state);
         app.sendBroadcast(new Intent(CarEngineTap.ACTION).setPackage(app.getPackageName())
             .putExtra("at",SystemClock.elapsedRealtime()).putExtra("kind","nativeRouteStatus").putExtra("state",state),
-            "com.yuminaga.motonav.permission.CAR_GUIDANCE");
+            "com.motonav.app.fresh.permission.CAR_GUIDANCE");
     }
     public static void poll(Application app){
         if(!busy.compareAndSet(false,true))return;
@@ -124,7 +124,7 @@ public final class NativeRouteBridge {
                 if(!current.equals(lastToken)){lastToken=current;lastId=-1;}
                 if(!checked){
                     File dir=new File(app.getApplicationInfo().nativeLibraryDir);
-                    if(!hash(new File(dir,"libhsl.so")).equals("cff6ed0c9c95ecc6b48502854ffcd65be1746c23a1e448a7f085542fb9926a83")||
+                    if(!hash(new File(dir,"libhsl.so")).equals("6c67ff15d76b54d808e50da64bb87fc23b8f8f6a86bbdfd92cf31fead9996a18")||
                        !hash(new File(dir,"libGbl.so")).equals("934396f73adf760af02e77ae8bd650c4e659522acd28db35f501d7633675a419")){
                         signal(app,"engine-binary-version-mismatch");return;
                     }
@@ -144,7 +144,7 @@ public final class NativeRouteBridge {
                 lastId=o.getLong("id");signal(app,"active-route-exported points="+o.getInt("count"));
                 app.sendBroadcast(new Intent(CarEngineTap.ACTION).setPackage(app.getPackageName())
                     .putExtra("at",SystemClock.elapsedRealtime()).putExtra("kind",preview?"previewRoute":"route").putExtra("id",Long.toString(lastId))
-                    .putExtra("count",o.getInt("count")),"com.yuminaga.motonav.permission.CAR_GUIDANCE");
+                    .putExtra("count",o.getInt("count")),"com.motonav.app.fresh.permission.CAR_GUIDANCE");
             }catch(Throwable e){signal(app,"reader-"+e.getClass().getSimpleName()+": "+String.valueOf(e.getMessage()));}
             finally{busy.set(false);}
         });

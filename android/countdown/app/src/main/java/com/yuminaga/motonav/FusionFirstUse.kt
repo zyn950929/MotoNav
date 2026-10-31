@@ -11,7 +11,7 @@ object FusionFirstUse {
         if(p.getLong("installation",-1)!=installed)p.edit().clear().putLong("installation",installed).commit()
         return p
     }
-    private fun supported(c:Context)=c.packageName=="com.autonavi.amapauto" && !APP_VERSION.contains("-replay.")
+    private fun supported(c:Context)=c.packageName=="com.motonav.app.fresh" && !APP_VERSION.contains("-replay.")
     fun complete(c:Context)=!supported(c) || prefs(c).getBoolean("completed",false)
     fun shouldOpen(c:Context)=supported(c) && !prefs(c).getBoolean("presented",false)
     fun returning(c:Context)=supported(c) && prefs(c).getBoolean("return_pending",false)

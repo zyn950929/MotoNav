@@ -4,8 +4,8 @@
      v3.9 声明要查看手机上的语音引擎（安卓 11 起不声明就只能看到系统自带的） -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
-    <permission android:name="com.yuminaga.motonav.permission.CAR_GUIDANCE" android:protectionLevel="signature" />
-    <uses-permission android:name="com.yuminaga.motonav.permission.CAR_GUIDANCE" />
+    <permission android:name="com.motonav.app.fresh.permission.CAR_GUIDANCE" android:protectionLevel="signature" />
+    <uses-permission android:name="com.motonav.app.fresh.permission.CAR_GUIDANCE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />

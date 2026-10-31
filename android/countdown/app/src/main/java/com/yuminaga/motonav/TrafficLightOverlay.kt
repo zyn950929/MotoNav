@@ -35,6 +35,7 @@ object TrafficLightOverlay {
     var enabled=false; private set
     var wantedDirection=0; private set
     var packets=0; private set
+    private var upstreamAt=0L
     var upstreamDirections:List<Int> = emptyList();private set
     var message="尚未启动"; private set
     private fun now()=SystemClock.elapsedRealtime()
@@ -87,9 +88,11 @@ object TrafficLightOverlay {
         SingleEngineSession.standard(i)
         CarNavSync.standard(i)
         if(!enabled)return
+        val listSource=i.hasExtra("lightsData")
         try {
             if(i.getIntExtra("KEY_TYPE",-1)!=60073)return
             packets++
+            upstreamAt=now()
             val json=i.getStringExtra("lightsData")
             if(i.getBooleanExtra("clearLights",false) || i.getBooleanExtra("EXTRA_CLEAR_LIGHTS",false) ||
                (i.hasExtra("lightsCount") && i.getIntExtra("lightsCount",-1)==0)) {
@@ -123,6 +126,8 @@ object TrafficLightOverlay {
                     .put("wanted",wantedDirection).put("directions",JSONArray(lights.map{it.dir}))
                     .put("format",if(json!=null)"camera-list" else "navigation-single")
                     .put("rawDir",i.getIntExtra("dir",-1)).put("carAligned",CarNavSync.aligned())
+                    .put("lights",JSONArray(lights.map{JSONObject().put("dir",it.dir).put("status",it.status).put("seconds",it.seconds)}))
+                    .put("gate",debug())
                     .put("matched",matched).toString())
             }
             if(!eligible){
@@ -139,7 +144,20 @@ object TrafficLightOverlay {
             val matched=junction.snapshots(now()).isNotEmpty()
             record(matched)
             message=if(matched)"已收到前方路口信息" else "当前路口暂无可用读秒"
-        } catch(_:Exception){clearPhase("灯数据无效，等待新快照")}
+        } catch(e:Exception){
+            junction.reject(listSource)
+            val remaining=junction.snapshots(now())
+            if(remaining.isEmpty()){
+                outputDelay.reset();BleLink.clearTrafficLight();sent=false
+            }
+            // The two callback formats have independent freshness/phase clocks.
+            // Invalid legacy fields must not wipe a valid multi-light snapshot.
+            message="当前来源灯数据无效，保留另一路有效快照"
+            Log.w("MotoNavLightOverlay",JSONObject().put("event","source-invalid")
+                .put("format",if(listSource)"camera-list" else "navigation-single")
+                .put("error",e.javaClass.simpleName)
+                .put("remainingDirections",JSONArray(remaining.map{it.dir})).toString())
+        }
     }
     private fun directDistance()=if(SingleEngineSession.owns)SingleEngineSession.signalDistance() else if(WebMotorGuide.active)WebMotorSignals.distance() else NaviBridge.trafficLightOverlayDistance()
     private fun overlayDistance():Int {
@@ -245,6 +263,8 @@ object TrafficLightOverlay {
         .put("stoppedAlignment",stoppedAlignmentHeld()).put("frameOpened",frameOpened)
         .put("frameSent",frameSent).put("frameId",frameId).put("near",gateWasOpen)
         .put("phaseCount",junction.snapshots(now()).size).put("approachKey",approachKey)
+        .put("packets",packets).put("upstreamAgeMs",if(upstreamAt>0)now()-upstreamAt else -1)
+        .put("message",message)
     fun color(status:Int)=when(status){1->Color.rgb(255,88,91);4->Color.rgb(80,225,143);-1->Color.rgb(255,210,65);else->Color.LTGRAY}
     fun phaseText(p:TrafficSignalPacket):String{
         val phase=when(p.status){1->"红";4->"绿";-1->"黄";else->"未知"}

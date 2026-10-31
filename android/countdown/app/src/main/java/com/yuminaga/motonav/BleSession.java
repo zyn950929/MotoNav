@@ -34,6 +34,6 @@ final class BleSession<T> {
 
     /** Only an explicit successful U reply or an authenticated capability-query response. */
     static boolean confirms(String message, boolean capabilityQuerySent) {
-        return "U,1".equals(message) || (capabilityQuerySent && ("CAP,BLD,1".equals(message) || "CAP,ZMAP,1".equals(message)));
+        return "U,1".equals(message) || (capabilityQuerySent && "CAP,BLD,1".equals(message));
     }
 }

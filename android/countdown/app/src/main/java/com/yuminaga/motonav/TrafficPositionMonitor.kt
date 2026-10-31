@@ -30,7 +30,7 @@ object TrafficPositionMonitor {
         }
     }
     fun start(c:Context){
-        if(c.packageName!="com.autonavi.amapauto" || manager!=null)return
+        if(c.packageName!="com.motonav.app.fresh" || manager!=null)return
         try{
             val m=c.getSystemService(Context.LOCATION_SERVICE) as LocationManager
             // Keep stopped fixes fresh for the red-light hold gate; a 2m minimum

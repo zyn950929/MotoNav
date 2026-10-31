@@ -46,6 +46,10 @@ public final class FusionCarUi implements Application.ActivityLifecycleCallbacks
         catch(ReflectiveOperationException|LinkageError e){return false;}
     }
     public static void install(Application app){
+        // AppComponentFactory also instantiates :locationservice and :push.
+        // Their JNI state/readiness is not the actual navigation engine's state.
+        String process=Application.getProcessName();
+        if(process==null||process.indexOf(':')>=0)return;
         FusionCarUi ui=new FusionCarUi();app.registerActivityLifecycleCallbacks(ui);
         // Run in the provider process: never load its JNI/Application in :motonav.
         ui.handler.post(new Runnable(){public void run(){
@@ -87,7 +91,7 @@ public final class FusionCarUi implements Application.ActivityLifecycleCallbacks
         Log.i("MotoNavProviderUi","provider float masked; native initialization/subscriptions preserved");
     }
     public static void prepare(Context c){
-        if(!"com.autonavi.amapauto".equals(c.getPackageName()))return;
+        if(!"com.motonav.app.fresh".equals(c.getPackageName()))return;
         // Explicit inspection stays visible through background route retries.
         // The return button / MotoNav resume closes it, rather than an engine request.
         try {
@@ -96,21 +100,6 @@ public final class FusionCarUi implements Application.ActivityLifecycleCallbacks
             if(Build.VERSION.SDK_INT>=26)c.startForegroundService(i);else c.startService(i);
             Log.i("MotoNavProviderUi","background service requested");
         } catch(RuntimeException e){Log.w("MotoNavProviderUi","background service unavailable",e);}
-    }
-    public static void stopService(Context c){
-        if(c==null || !"com.autonavi.amapauto".equals(c.getPackageName()))return;
-        try {
-            Intent i=new Intent().setClassName(c.getPackageName(),
-                "com.autonavi.amapauto.background.AutoBackgroundService");
-            c.stopService(i);
-            Log.i("MotoNavProviderUi","background service stopped");
-        } catch(RuntimeException e){Log.w("MotoNavProviderUi","background service stop unavailable",e);}
-        try {
-            NotificationManager manager=(NotificationManager)c.getSystemService(Context.NOTIFICATION_SERVICE);
-            if(manager!=null){
-                manager.cancel(7317);
-            }
-        } catch(RuntimeException ignored){}
     }
     public static void openConsole(Context c){
         openConsole(c,"com.yuminaga.motonav.MainActivity");
@@ -142,8 +131,8 @@ public final class FusionCarUi implements Application.ActivityLifecycleCallbacks
         button.setText("返回 MotoNav");button.setAllCaps(false);
         button.setTextColor(Color.WHITE);button.setBackgroundColor(0xff352b47);
         float density=a.getResources().getDisplayMetrics().density;
-        FrameLayout.LayoutParams p=new FrameLayout.LayoutParams((int)(160*density),(int)(48*density),Gravity.BOTTOM|Gravity.START);
-        p.bottomMargin=(int)(8*density);p.leftMargin=(int)(8*density);
+        FrameLayout.LayoutParams p=new FrameLayout.LayoutParams((int)(160*density),(int)(48*density),Gravity.TOP|Gravity.END);
+        p.topMargin=(int)(8*density);p.rightMargin=(int)(8*density);
         content.addView(button,p);
         button.setOnClickListener(v->{
             String destination="com.yuminaga.motonav.MainActivity";
@@ -162,7 +151,7 @@ public final class FusionCarUi implements Application.ActivityLifecycleCallbacks
     }
     /** Keep the mandatory foreground-service notification; tapping returns MotoNav. */
     public static Notification notification(Context c,Notification original){
-        if(!"com.autonavi.amapauto".equals(c.getPackageName()))return original;
+        if(!"com.motonav.app.fresh".equals(c.getPackageName()))return original;
         NotificationManager manager=(NotificationManager)c.getSystemService(Context.NOTIFICATION_SERVICE);
         if(Build.VERSION.SDK_INT>=26)manager.createNotificationChannel(
             new NotificationChannel(CHANNEL,"MotoNav 路口信息",NotificationManager.IMPORTANCE_LOW));

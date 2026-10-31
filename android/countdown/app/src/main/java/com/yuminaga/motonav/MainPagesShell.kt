@@ -60,6 +60,8 @@ class MainPagesShell(private val activity:AppCompatActivity, saved:Bundle?,
             navigation.addView(tab,LayoutParams(0,dp(58),1f))
             tabs+=tab;icons+=icon;labels+=label;indicators+=indicator
         }
+        // 底部导航栏上方一条细分隔线
+        addView(View(activity).apply{setBackgroundColor(S.STROKE)},LayoutParams(-1,maxOf(1,dp(1)/2)))
         addView(navigation,LayoutParams(-1,-2))
         ViewCompat.setOnApplyWindowInsetsListener(this){view,insets->
             val bars=insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())

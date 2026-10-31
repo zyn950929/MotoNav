@@ -151,13 +151,14 @@ object SingleEngineSession {
         File(c.filesDir,"single-engine-route.json").delete()
         val r=object:BroadcastReceiver(){override fun onReceive(c:Context,i:Intent){receive(i)}}
         if(Build.VERSION.SDK_INT>=33)context!!.registerReceiver(r,IntentFilter(CarEngineTap.ACTION),
-            "com.yuminaga.motonav.permission.CAR_GUIDANCE",handler,Context.RECEIVER_NOT_EXPORTED)
-        else context!!.registerReceiver(r,IntentFilter(CarEngineTap.ACTION),"com.yuminaga.motonav.permission.CAR_GUIDANCE",handler)
+            "com.motonav.app.fresh.permission.CAR_GUIDANCE",handler,Context.RECEIVER_NOT_EXPORTED)
+        else context!!.registerReceiver(r,IntentFilter(CarEngineTap.ACTION),"com.motonav.app.fresh.permission.CAR_GUIDANCE",handler)
         receiver=r
         MapFeeder.clearSingleEngineRoute();MapFeeder.onNaviStart()
         BleLink.send("C");BleLink.send("#z,0");BleLink.send("#j");BleLink.send("#k");BleLink.send("#c");BleLink.send("#g")
         TrafficPositionMonitor.start(c)
         status="已关闭 MotoNav 导航引擎，请在内置导航选择目的地"
+        NavService.updateWakeLock()
         handler.post(tick)
         Log.i("MotoNavSingleEngine","armed; SDK navigation released; native engine is sole guidance owner")
     }
@@ -172,8 +173,6 @@ object SingleEngineSession {
             File(c.filesDir,"single-engine-preview-enabled").delete()
             File(c.filesDir,"single-engine-simulation-command.json").delete()
             if(stopNative)c.sendBroadcast(Intent("AUTONAVI_STANDARD_BROADCAST_RECV").setPackage(c.packageName).putExtra("KEY_TYPE",10010))
-            FusionCarUi.finishWarm(c, warmToken)
-            FusionCarUi.stopService(c)
         }
         TrafficPositionMonitor.stop();BleLink.send("C");BleLink.clearTrafficLight();BleLink.sendTrafficApproach(0)
         RideRecorder.stop();lifecycle.cancel();MapFeeder.clearSingleEngineRoute()
@@ -386,6 +385,7 @@ object SingleEngineSession {
             }
             "previewRoute"->readPreview()
             "engine"->{
+                if(i.getStringExtra("providerProcess")!=context?.packageName)return
                 engineAt=t;simulation=i.getBooleanExtra("simulation",false)
                 val active=lifecycle.open()&&(if(requestSimulation)simulation else i.getBooleanExtra("real",false)||simulation)
                 if(active&&!nativeRunning)lastMute=null

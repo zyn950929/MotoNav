@@ -44,7 +44,7 @@ rewrite_refs(car,cr);rewrite_refs(own,mr)
 app=car.find('application');mapp=own.find('application')
 assert app is not None and mapp is not None
 app.set(A+'appComponentFactory','com.yuminaga.motonav.FusionComponentFactory')
-app.set(A+'debuggable','true')
+app.set(A+'debuggable','false')
 app.set(A+'label',mapp.get(A+'label'))
 app.set(A+'icon',mapp.get(A+'icon'))
 app.set(A+'extractNativeLibs','true')
@@ -92,10 +92,17 @@ if sdk is None:sdk=E.SubElement(car,'uses-sdk')
 sdk.set(A+'minSdkVersion','28')
 if A+'targetSdkVersion' not in sdk.attrib:sdk.set(A+'targetSdkVersion','32')
 # The car engine parses this field as its own numeric protocol version.
-# The MotoNav UI separately displays APP_VERSION=8.3.25-fusion.1.
-car.set(A+'versionCode','26000001');car.set(A+'versionName','9.5.0.600013')
+# The MotoNav UI separately displays APP_VERSION=8.3.26-single.32.
+car.set(A+'versionCode','26000032');car.set(A+'versionName','9.5.0.600013')
 for e in car.iter():
     for k in list(e.attrib):
         if k.startswith('{http://schemas.android.com/tools}'):del e.attrib[k]
+# Relocate only host identities, not the provider implementation class names.
+car.set('package','com.motonav.app.fresh')
+for node in car.iter():
+    for attr,val in list(node.attrib.items()):
+        if attr in [A+'authorities',A+'permission',A+'readPermission',A+'writePermission',A+'taskAffinity'] or (node.tag in ['permission','uses-permission'] and attr==A+'name'):
+            val=val.replace('com.autonavi.amapauto','com.motonav.app.fresh').replace('com.yuminaga.motonav.permission.CAR_GUIDANCE','com.motonav.app.fresh.permission.CAR_GUIDANCE')
+            node.set(attr,val)
 E.ElementTree(car).write(root/'AndroidManifest.xml',encoding='utf-8',xml_declaration=True)
 print('Merged manifest prepared; target SDK',sdk.get(A+'targetSdkVersion'))

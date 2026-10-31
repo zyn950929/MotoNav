@@ -40,7 +40,7 @@ object WebMotorGuide {
     private fun syncCarRoute(chosen:WebMotorRoute) {
         appContext?.let{c->runCatching{
             CarNavSync.requestWeb(c,chosen,simulation)
-            if(c.packageName=="com.autonavi.amapauto"){
+            if(c.packageName=="com.motonav.app.fresh"){
                 val anchors=CarNavSync.webAnchors(chosen.key).ifEmpty{
                     RouteAnchorSelector.select(chosen.points.toTypedArray(),intArrayOf()).map{chosen.points[it]}
                 }
@@ -121,6 +121,7 @@ object WebMotorGuide {
             }
         }
         syncCarRoute(chosen)
+        NavService.updateWakeLock()
         main.post(tick)
     }
 

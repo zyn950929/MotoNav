@@ -48,6 +48,19 @@ public final class CarSignalAlignment {
         long translated=(long)light+carSegment-sdkSegment;
         return translated<0||translated>Integer.MAX_VALUE ? -1 : (int)translated;
     }
+    /** Caller has already matched the junction/route. A proven stationary hold
+     * also checks fresh GPS, unchanged road pair, maneuver and route distances.
+     * Near a stop line, one engine can predict past the marker: a negative
+     * translated offset must not revoke that independently established match.
+     * This authorizes a fresh upstream snapshot, never a cached phase.
+     */
+    public static boolean movementAgreement(int wanted,int light,int sdkSegment,int carSegment,
+                                            String carTurn,boolean stoppedMatched){
+        if((wanted!=1&&wanted!=2&&wanted!=4)||light<0||light>300||sdkSegment<0||carSegment<0)return false;
+        if(stoppedMatched)return true;
+        int translated=lightInCarReference(light,sdkSegment,carSegment);
+        return wanted==TrafficSignalPolicy.desiredMovementAtOffset(carTurn,carSegment,translated);
+    }
     public static boolean matches(boolean requested,boolean sdkSimulation,int carType,long requestedAt,
         long carAt,long now,double expectedLat,double expectedLng,double endLat,double endLng,
         double sdkLat,double sdkLng,double carLat,double carLng){
