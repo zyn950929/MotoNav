@@ -213,7 +213,7 @@ final class MapFeeder: ObservableObject {
             MapPipelineTrace.event("movement-cancel", ["serial": requestSerial, "baseReady": fetchingBaseReady, "needsCoverage": needsCoverage, "nextBlock": changedNode, "kmh": kmh])
             workToken.cancel(); requestSerial += 1; fetching = false
         }
-        let retryBuildings = buildingMode && MapCoveragePolicy.mayCaptureBuildings(kmh:kmh) && !chunkBuildingsComplete && UIApplication.shared.applicationState == .active && Date().timeIntervalSince(lastBuildingTry) >= 60
+        let retryBuildings = offlineMaps == nil && buildingMode && MapCoveragePolicy.mayCaptureBuildings(kmh:kmh) && !chunkBuildingsComplete && UIApplication.shared.applicationState == .active && Date().timeIntervalSince(lastBuildingTry) >= 60
         // Preparation and display targets differ: a future block may be captured now,
         // then held until it covers the viewport and the previous ATT transfer finishes.
         let wanted = haveChunk && prepareEarly ? (futureNode ?? node) : node
@@ -250,7 +250,7 @@ final class MapFeeder: ObservableObject {
         let outsideView = pose.map { !sat && src == Self.SRC_AMAP && !MapCoveragePolicy.covers(x:$0.x,y:$0.y,cx:cx,cy:cy,kmh:max(120,$0.kmh),margin:50) } ?? false
         if transferPending || outsideView {
             if pose.map({MapHandoffBuffer.mayPrepare(x:$0.x,y:$0.y,cx:cx,cy:cy)}) ?? true {
-                handoff.stage(.init(bytes:displayBytes,cx:cx,cy:cy,sat:sat,type:type,info:info,source:src,style:Settings.shared.theme))
+                handoff.stage(.init(bytes:b,cx:cx,cy:cy,sat:sat,type:type,info:info,source:src,style:Settings.shared.theme))
                 MapPipelineTrace.event("map-staged",["transferPending":transferPending,"outsideView":outsideView])
             }
             return
@@ -271,7 +271,7 @@ final class MapFeeder: ObservableObject {
         let serial = requestSerial
         MapPipelineTrace.event("fetch-start", ["serial": serial, "buildings": buildingMode, "source": Settings.shared.mapSource])
         workToken.cancel(); let token = MapWorkToken(); workToken = token
-        let src = Settings.shared.mapSource, sat = satMode, buildings = buildingMode && MapCoveragePolicy.mayCaptureBuildings(kmh:pose?.kmh ?? 0), style = Settings.shared.theme
+        let src = Settings.shared.mapSource, sat = satMode, buildings = node == nil && buildingMode && MapCoveragePolicy.mayCaptureBuildings(kmh:pose?.kmh ?? 0), style = Settings.shared.theme
         let half = HALF, satHalf = SAT_HALF, maps = offlineMaps
         // Cached packets can be read and sent even when iOS has suspended graphics rendering.
         if let node = node, let cached = maps?.read(node) {
