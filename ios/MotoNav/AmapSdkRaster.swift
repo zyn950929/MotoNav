@@ -4,7 +4,7 @@ import Foundation
 enum AmapSdkRaster {
     private static let lease = NSLock()
     static func build(_ f: MapGeo.Frame, cx: Double, cy: Double, includeBuildings: Bool,
-                      shouldCancel: @escaping () -> Bool, onBaseReady: ((Data) -> Void)? = nil, onBuildingStatus: ((String) -> Void)? = nil, satellite: Bool = false, style: Int = 1) throws -> RasterResult {
+                      shouldCancel: @escaping () -> Bool, onBaseReady: ((Data) -> Void)? = nil, onBuildingStatus: ((String) -> Void)? = nil, satellite: Bool = false, style: Int = 1, preparedBase:Data? = nil) throws -> RasterResult {
         precondition(!Thread.isMainThread)
         func check() throws { if shouldCancel() { throw MapProcessingError.cancelled } }
         while !lease.try() { try check(); Thread.sleep(forTimeInterval: 0.1) }
@@ -43,6 +43,12 @@ enum AmapSdkRaster {
         }
         let half = satellite ? 700.0 : 1200.0
         let n = satellite ? 400 : 1200, x = Int((cx - half).rounded()), y = Int((cy + half).rounded())
+        let roads:[UInt8],base:Data
+        if includeBuildings,!satellite,style==1,let cached=preparedBase,
+           RasterPacket.valid(cached,frame:f.id,x:x,y:y),!RasterPacket.isBuilding(cached),
+           MapStyleTransfer.matches(cached,style:1),let decoded=RasterPacket.decode(cached) {
+            roads=decoded;base=cached
+        } else {
         let raw = try take(x: x, y: y, n: n)
         guard stride(from: 0, to: raw.count, by: 7).contains(where: { raw[$0] != raw[0] }) else { throw MapProcessingError.invalid("高德返回纯色底图") }
         if satellite { return try SatelliteRaster.encode(f,cx: cx,cy: cy,half: half,raw: raw,shouldCancel: shouldCancel) }
@@ -60,8 +66,8 @@ enum AmapSdkRaster {
             guard RasterPacket.valid(packet) else { throw MapProcessingError.invalid("黑白道路数据无效") }
             onBaseReady?(packet); return RasterResult(bytes: packet, tiles: 1, fromCache: 0)
         }
-        let roads=MapGeo.classifyAmapBase(raw,w:n,h:n)
-        let base=MapGeo.encodeRaster(frameId:f.id,x0:x,y0:y,w:n,h:n,mmPerPx:2000,idx:roads)
+        roads=MapGeo.classifyAmapBase(raw,w:n,h:n)
+        base=MapGeo.encodeRaster(frameId:f.id,x0:x,y0:y,w:n,h:n,mmPerPx:2000,idx:roads)
         MapSampleReport.shared.capture(raw:raw,indices:roads,packet:base,w:n,h:n,style:style)
         guard MapGeo.materialPixelCount(roads)>=MapGeo.minMaterialPixels(w:n,h:n) else {
             throw MapProcessingError.invalid("底图尚未准备完整，保留已有地图")
@@ -69,12 +75,13 @@ enum AmapSdkRaster {
         try check()
         guard RasterPacket.valid(base) else { throw MapProcessingError.invalid("高德普通底图编码不完整") }
         try check()
+        }
         MapPipelineTrace.event("base-ready", ["job": job, "bytes": base.count])
         onBaseReady?(base)
         guard includeBuildings else { return RasterResult(bytes: base, tiles: 1, fromCache: 0) }
         onBuildingStatus?("正在从高德近景截图提取建筑轮廓…")
         do {
-            var roofs = raw
+            var roofs = [UInt32](repeating:0xfff8f9fa,count:n*n)
             for ty in 0...1 { for tx in 0...1 {
                 try check()
                 let tile = try take(x: x + tx * 1200, y: y - ty * 1200, n: 600)

@@ -9,6 +9,9 @@ struct BleBulkWriteQueue {
     private var acknowledged: [Int: Int] = [:]
     private(set) var inFlight: Part?
     var hasData: Bool { inFlight != nil || !parts.isEmpty }
+    func contains(type:Int,id:Int)->Bool {
+        (inFlight?.type == type && inFlight?.id == id) || parts.contains{$0.type==type && $0.id==id}
+    }
     var canStart: Bool { inFlight == nil && !parts.isEmpty }
     var queuedCount: Int { parts.count }
     mutating func replace(type: Int, id: Int, packets: [Data], prioritize: Bool = false) {

@@ -15,7 +15,7 @@ enum MapCoveragePolicy {
         max(0, min(preferred, half - radius(kmh: kmh) - 180))
     }
     static func needsRefresh(x: Double, y: Double, cx: Double, cy: Double, bearing: Double, kmh: Int,
-                             preparationSeconds: Double = 8) -> Bool {
+                             preparationSeconds: Double = 12) -> Bool {
         // Leave time for rendering, processing and BLE delivery before the current map expires.
         let distance = Double(max(0, kmh)) / 3.6 * max(1, min(30, preparationSeconds))
         let angle = bearing * .pi / 180
@@ -66,6 +66,13 @@ struct RouteMapPlan {
     }
     func target(progress: Double, initial: Bool) -> Int {
         max(0, min(nodes.count - 1, Int(floor((progress + (initial ? Self.step / 2 : 800)) / Self.step))))
+    }
+    /// Capture a future usable block before it can yet cover the current viewport.
+    /// Projection follows the route through turns rather than extending the current heading.
+    func preparationTarget(progress: Double, kmh: Int) -> Int {
+        let predicted = min(length, max(0, progress) + Double(max(0,kmh))/3.6*12)
+        let point = at(predicted)
+        return displayTarget(progress:predicted,x:point.x,y:point.y,kmh:kmh)
     }
     func displayTarget(progress: Double, x: Double, y: Double, kmh: Int) -> Int {
         let nearest = target(progress: progress, initial: true), next = min(nodes.count - 1, nearest + 1)
@@ -141,5 +148,52 @@ final class RouteMapCache {
     func sizeText() -> String {
         lock.lock(); defer { lock.unlock() }
         return "离线缓存 \(totalBytesLocked() / 1024 / 1024) MB / 512 MB"
+    }
+}
+
+
+/// Separates capture readiness from display readiness and ATT transfer readiness.
+struct MapHandoffBuffer {
+    struct Packet {
+        let bytes:Data, cx:Double, cy:Double, sat:Bool, type:Int, info:String, source:Int, style:Int
+    }
+    private(set) var pending:Packet?
+    static func mayPrepare(x:Double,y:Double,cx:Double,cy:Double)->Bool {
+        max(abs(x-cx),abs(y-cy)) < 1150
+    }
+    mutating func clear() { pending=nil }
+    mutating func stage(_ packet:Packet) { pending=packet }
+    func contains(cx:Double,cy:Double,style:Int)->Bool {
+        guard let p=pending else {return false}
+        return p.style==style && abs(p.cx-cx)<1 && abs(p.cy-cy)<1
+    }
+    mutating func take(x:Double,y:Double,kmh:Int,style:Int,transferPending:Bool)->Packet? {
+        guard let p=pending else {return nil}
+        guard p.style==style, Self.mayPrepare(x:x,y:y,cx:p.cx,cy:p.cy) else {pending=nil;return nil}
+        guard !transferPending, p.sat || MapCoveragePolicy.covers(x:x,y:y,cx:p.cx,cy:p.cy,kmh:max(120,kmh),margin:50) else {return nil}
+        pending=nil;return p
+    }
+}
+
+
+/// Roads in the near window precede roofs; nearby roofs precede distant road downloads.
+/// A long route must not postpone every building until its last base packet is ready.
+enum RouteMapPreparationPolicy {
+    struct Job {let index:Int, buildings:Bool}
+    static func next(base:[Bool],complete:[Bool],display:Int,target:Int,buildings:Bool,kmh:Int,available:[Bool])->Job? {
+        guard !base.isEmpty,base.count==complete.count,base.count==available.count else {return nil}
+        let d=max(0,min(base.count-1,display)),t=max(d,min(base.count-1,target))
+        let near=Array(d...min(base.count-1,t+2))
+        if let i=near.first(where:{!base[$0] && available[$0]}) {return Job(index:i,buildings:false)}
+        let roadsReady=near.allSatisfy{base[$0]}
+        if buildings && roadsReady {
+            let first=kmh>5 ? t : d
+            let order=[first]+near.filter{$0 != first}
+            if let i=order.first(where:{!complete[$0] && available[$0]}) {return Job(index:i,buildings:true)}
+        }
+        let order=Array(t..<base.count)+Array(0..<t)
+        if let i=order.first(where:{!base[$0] && available[$0]}) {return Job(index:i,buildings:false)}
+        if buildings && roadsReady,let i=order.first(where:{!complete[$0] && available[$0]}) {return Job(index:i,buildings:true)}
+        return nil
     }
 }

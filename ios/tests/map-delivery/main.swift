@@ -79,3 +79,61 @@ do {try cache.store(empty,frame:frame,source:3,node:node,style:1);fatalError("bl
 check(cache.read(frame:frame,source:3,buildings:false,node:node,style:1)==packet,"valid cached map survives rejected blank update")
 try? FileManager.default.removeItem(at:folder)
 print("PASS real-sample pale-land colours, resampling-mesh rejection, near-white roads, gray highways, old cache rejection and 60/80/100/120 km/h handovers")
+
+
+// The earlier coverage test assumed maps appeared instantly. Include actual capture
+// and wire delay, and hold the original displayed map until the wire finishes.
+func simulateHandoffs(speed:Int,captureDelay:Double,wireDelay:Double,early:Bool)->Int {
+    let plan=try! RouteMapPlan([(0,0),(0,18000)])
+    var buffer=MapHandoffBuffer(), displayed=plan.nodes[0], sent=displayed
+    var capture:(node:RouteMapPlan.Node,at:Double)?
+    var wire:(node:RouteMapPlan.Node,at:Double)?
+    var blanks=0
+    for tick in 0...Int(15000/(Double(speed)/3.6)*10) {
+        let now=Double(tick)/10,meters=now*Double(speed)/3.6
+        if let job=wire,now>=job.at {displayed=job.node;wire=nil}
+        if let job=capture,now>=job.at {
+            buffer.stage(.init(bytes:Data([1]),cx:job.node.x,cy:job.node.y,sat:false,type:3,info:"",source:3,style:1));capture=nil
+        }
+        if let p=buffer.take(x:0,y:meters,kmh:speed,style:1,transferPending:wire != nil) {
+            sent = .init(x:p.cx,y:p.cy,distance:0)
+            wire=(sent,now+wireDelay)
+        }
+        let displayIndex=plan.displayTarget(progress:meters,x:0,y:meters,kmh:speed)
+        let refresh=MapCoveragePolicy.needsRefresh(x:0,y:meters,cx:sent.x,cy:sent.y,bearing:0,kmh:speed)
+        let index=early && refresh ? plan.preparationTarget(progress:meters,kmh:speed) : displayIndex
+        let next=plan.nodes[index]
+        if capture==nil,buffer.pending==nil,abs(next.y-sent.y)>1 {
+            capture=(next,now+captureDelay)
+        }
+        if !MapCoveragePolicy.covers(x:0,y:meters,cx:displayed.x,cy:displayed.y,kmh:max(120,speed)) {blanks+=1}
+    }
+    return blanks
+}
+for speed in [60,80,100,120] {
+    for latency in [(4.0,1.0),(8.0,3.0)] {
+        check(simulateHandoffs(speed:speed,captureDelay:latency.0,wireDelay:latency.1,early:true)==0,"timed capture + BLE handoff covers the display")
+    }
+}
+check(simulateHandoffs(speed:120,captureDelay:8,wireDelay:3,early:false)>0,"reproduce old late-capture blank at highway speed")
+var staged=MapHandoffBuffer()
+staged.stage(.init(bytes:Data([9]),cx:0,cy:600,sat:false,type:3,info:"",source:3,style:1))
+check(staged.take(x:0,y:0,kmh:120,style:1,transferPending:false)==nil,"early map must wait until its viewport is usable")
+check(staged.pending != nil,"early result must not be discarded")
+check(staged.take(x:0,y:300,kmh:120,style:1,transferPending:true)==nil,"new map cannot replace an unfinished transfer")
+check(staged.take(x:0,y:300,kmh:120,style:1,transferPending:false)?.bytes==Data([9]),"staged map sends after current transfer finishes")
+staged.stage(.init(bytes:Data([9]),cx:0,cy:600,sat:false,type:3,info:"",source:3,style:1))
+check(staged.take(x:0,y:300,kmh:120,style:0,transferPending:false)==nil && staged.pending==nil,"style change invalidates prepared map")
+var base=[Bool](repeating:false,count:100),complete=base,available=[Bool](repeating:true,count:100)
+for i in 0...3 {base[i]=true}
+let roofs=RouteMapPreparationPolicy.next(base:base,complete:complete,display:0,target:1,buildings:true,kmh:120,available:available)
+check(roofs?.index==1 && roofs?.buildings==true,"nearby future buildings prepare before 96 distant base blocks, including highway speed")
+base[2]=false
+let urgent=RouteMapPreparationPolicy.next(base:base,complete:complete,display:0,target:1,buildings:true,kmh:120,available:available)
+check(urgent?.index==2 && urgent?.buildings==false,"missing upcoming roads always precede building passes")
+available[2]=false
+check(RouteMapPreparationPolicy.next(base:base,complete:complete,display:0,target:1,buildings:true,kmh:120,available:available)?.buildings==false,"failed roof/base retry must not block other road preparation")
+base[2]=true
+available[1]=false
+check(RouteMapPreparationPolicy.next(base:base,complete:complete,display:0,target:1,buildings:true,kmh:120,available:available)?.index != 1,"roof cooldown is local rather than stopping all downloads")
+print("PASS delayed 60/80/100/120 km/h handoffs; old blank reproduced; staged-map ATT protection; near-route building priority")
