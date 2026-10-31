@@ -18,6 +18,10 @@ final class Weather: ObservableObject {
     private var images: [(Int, TextImage.Img?)] = []
     private let geocoder = CLGeocoder()
 
+    var displaySummary:String {
+        if info.contains("失败") || info.contains("HTTP") || info.contains("Error") || info.contains("无效") { return "天气暂未更新，请检查配置或稍后重试" }
+        return String(info.split(separator:"；",maxSplits:1).first ?? "")
+    }
     func save(host: String, key: String) throws {
         let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "https://", with: "").trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
@@ -182,8 +186,7 @@ struct WeatherSettingsView: View {
             }
             if !error.isEmpty { Text(error).foregroundColor(.orange) }
             Button("刷新天气") { weather.request(force: true) }
-            Text(weather.info).font(.caption)
-            Text(weather.detail).font(.caption).textSelection(.enabled)
+            Text(weather.displaySummary).font(.caption)
             Link("和风天气来源说明", destination: URL(string: "https://developer.qweather.com/attribution.html")!)
         }.tint(ContentView.cyan)
     }

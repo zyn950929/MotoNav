@@ -4,7 +4,7 @@ import AVFoundation
 
 /// 版本：跟随 App 版本（见 Config.swift）
 ///
-/// 主界面：圆屏连接状态、搜索目的地 / 导入高德分享路线、选路线、开始导航、巡航、圆屏设置、Key 设置、调试信息
+/// 主界面：圆屏连接状态、搜索目的地 / 导入高德分享路线、选路线、开始导航、巡航、圆屏设置、Key 设置
 /// （罪恶都市风深色界面）
 struct ContentView: View {
     @ObservedObject var ble = BleLink.shared
@@ -27,7 +27,6 @@ struct ContentView: View {
     @State private var query = ""
     @State private var dest: SearchService.Place?
     @State private var showNavi = false
-    @State private var showDebug = false
     @State private var showKeys = false                 // iOS v0.7 填写地图 Key 页面
     private static var keyPrompted = false              // 这次打开 App 已经提醒过填 key 了
     @State private var shareBusy = false
@@ -49,30 +48,28 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             activeNavigationBanner
-            ZStack {
-                ForEach(0..<5) { index in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            header
-                            if index == 0 {
-                                cruiseCard
-                                statusCard
-                                HStack {
-                                    Button("摩托车路线规划") { if !independent.running {independent.arrived=false}; independentMode = .motorcycle; showWebMotor = true }.foregroundColor(Self.pink)
-                                    Spacer()
-                                    Button("自行车路线规划") { if !independent.running {independent.arrived=false}; independentMode = .bicycle; showWebMotor = true }.foregroundColor(Self.cyan)
-                                }
-                                destCard
-                                favoritesCard
-                                Button("骑行轨迹") { showRides = true }.foregroundColor(Self.cyan)
-                            } else if index == 1 { displayCard }
-                            else if index == 2 { voiceCard }
-                            else if index == 3 { statusCard; settingsCard; debugCard }
-                            else { keyCard; Text(weather.detail).foregroundColor(Self.sub) }
-                        }.padding(16)
-                    }.opacity(page == index ? 1 : 0).allowsHitTesting(page == index).accessibilityHidden(page != index)
-                }
-            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    if page == 0 {
+                        connectionPill
+                        motorcycleEntry
+                        destCard
+                        HStack {
+                            Button { if !independent.running { independent.arrived=false }; independentMode = .bicycle; showWebMotor=true } label: {
+                                Label("自行车路线", systemImage:"bicycle")
+                            }
+                            Spacer()
+                            Button { showRides=true } label: { Label("骑行轨迹", systemImage:"point.topleft.down.curvedto.point.bottomright.up") }
+                        }.font(.subheadline).foregroundColor(Self.cyan).padding(.horizontal,4)
+                        favoritesCard
+                        cruiseCard
+                    } else if page == 1 { displayCard }
+                    else if page == 2 { voiceCard }
+                    else if page == 3 { statusCard; settingsCard }
+                    else { keyCard }
+                }.padding(16)
+            }.id(page)
             HStack(spacing: 0) {
                 ForEach(0..<5) { index in
                     Button { hideKeyboard(); page = index } label: {
@@ -85,6 +82,7 @@ struct ContentView: View {
             }.background(Self.card)
         }
         .background(ContentView.bg.ignoresSafeArea())
+        .preferredColorScheme(.dark)
         .fullScreenCover(isPresented: $showWebMotor) { WebMotorView(mode:independentMode) }
         .sheet(isPresented: $showRides) { NavigationView { RideHistoryView() } }
         .fullScreenCover(isPresented: $showNavi) { NaviScreen() }
@@ -132,14 +130,47 @@ struct ContentView: View {
 
     // MARK: 标题
     private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("MotoNav")
-                .font(.system(size: 34, weight: .heavy, design: .rounded))
-                .italic()
-                .foregroundStyle(LinearGradient(colors: [ContentView.pink, ContentView.cyan], startPoint: .leading, endPoint: .trailing))
-            Text("圆屏导航 · \(APP_VERSION)").font(.caption).foregroundColor(ContentView.sub)
-        }
-        .padding(.top, 8)
+        VStack(alignment: .leading, spacing: 5) {
+            if page == 0 {
+                Text("MotoNav")
+                    .font(.system(size:32,weight:.heavy,design:.rounded)).italic()
+                    .foregroundStyle(LinearGradient(colors:[Self.pink,Self.cyan],startPoint:.leading,endPoint:.trailing))
+                Text("圆屏摩托导航").font(.subheadline).foregroundColor(Self.sub)
+            } else {
+                Text(["MotoNav","圆屏显示","导航语音","圆屏设置","地图 Key"][page])
+                    .font(.system(size:28,weight:.bold)).foregroundColor(.white)
+            }
+        }.padding(.top,8).padding(.bottom,4)
+    }
+
+    private var connectionPill: some View {
+        Button { page=3 } label: {
+            HStack(spacing:10) {
+                Circle().fill(ble.isReady && ble.verified ? Color.green : Color.orange).frame(width:8,height:8)
+                Text(ble.connectionSummary).font(.subheadline).foregroundColor(.white).lineLimit(1)
+                Spacer(minLength:4)
+                Image(systemName:"chevron.right").font(.caption).foregroundColor(Self.sub)
+            }.padding(.horizontal,14).frame(minHeight:44).background(Capsule().fill(Self.card))
+                .overlay(Capsule().stroke(Self.stroke,lineWidth:1))
+        }.buttonStyle(.plain)
+    }
+
+    private var motorcycleEntry: some View {
+        Button {
+            if !independent.running { independent.arrived=false }
+            independentMode = .motorcycle; showWebMotor=true
+        } label: {
+            HStack {
+                VStack(alignment:.leading,spacing:6) {
+                    Text("摩托车路线规划").font(.system(size:20,weight:.bold)).foregroundColor(.white)
+                    Text("选起终点 · 对比路线 · 常用地点").font(.caption).foregroundColor(Self.sub)
+                }
+                Spacer(minLength:8)
+                Image(systemName:"chevron.right").font(.title3.bold()).foregroundColor(Self.pink)
+            }.padding(20).frame(maxWidth:.infinity,alignment:.leading)
+                .background(RoundedRectangle(cornerRadius:20).fill(LinearGradient(colors:[Color(red:0.17,green:0.09,blue:0.19),Color(red:0.09,green:0.13,blue:0.18)],startPoint:.topLeading,endPoint:.bottomTrailing)))
+                .overlay(RoundedRectangle(cornerRadius:20).stroke(Self.pink.opacity(0.5),lineWidth:1))
+        }.buttonStyle(.plain)
     }
 
     // MARK: 圆屏状态
@@ -152,11 +183,7 @@ struct ContentView: View {
                 Button(ble.isReady ? "断开" : "连接") { ble.isReady ? ble.disconnect() : ble.connect() }
                     .foregroundColor(ContentView.cyan)
             }
-            Text(ble.status).font(.footnote).foregroundColor(ContentView.sub)
-            // iOS v0.6 圆屏画小地图时每 2 秒回报一次帧率
-            if ble.isReady, Date().timeIntervalSince(ble.statAt) < 10, !ble.screenFps.isEmpty {
-                Text("小地图 \(ble.screenFps) 帧/秒").font(.footnote).foregroundColor(ContentView.sub)
-            }
+            Text(ble.connectionSummary).font(.footnote).foregroundColor(ContentView.sub)
             if navi.navigating {
                 Text("导航中：\(navi.uiDir) \(navi.uiDist) 米 · \(navi.uiSpeed) km/h").font(.footnote).foregroundColor(ContentView.cyan)
                 if navi.uiRemainM > 0 {
@@ -165,8 +192,6 @@ struct ContentView: View {
                 }
                 Button("回到导航画面") { showNavi = true }.foregroundColor(ContentView.pink)
             }
-            Text("小地图：\(map.shortStatus) · 高德 · \(Settings.themeName(settings.theme))")
-                .font(.caption).foregroundColor(ContentView.sub)
         }
     }
 
@@ -202,12 +227,12 @@ struct ContentView: View {
             .disabled(shareBusy)
             Text("在高德里规划好路线 → 分享 → 选 MotoNav；或者复制链接后点上面这行").font(.caption2).foregroundColor(ContentView.sub)
             }
-            if !shareStatus.isEmpty { Text(shareStatus).font(.footnote).foregroundColor(ContentView.sub) }
+            if !shareStatus.isEmpty { Text(Self.userMessage(shareStatus)).font(.footnote).foregroundColor(ContentView.sub) }
             if !pendingShare.isEmpty && !shareBusy {
                 Button("网页验证后重试"){showShareVerification=true}.foregroundColor(Self.cyan)
             }
             if addingVia{Button("搜索附近加油站"){query="加油站";search.searchFuel()}.foregroundColor(Self.cyan)}
-            if !search.status.isEmpty { Text(search.status).font(.footnote).foregroundColor(ContentView.sub) }
+            if !search.status.isEmpty { Text(Self.userMessage(search.status)).font(.footnote).foregroundColor(ContentView.sub) }
             ForEach(search.results.prefix(8)) { p in
                 Button { choose(p) } label: {
                     HStack(alignment: .center, spacing: 8) {
@@ -288,7 +313,7 @@ struct ContentView: View {
                     .foregroundColor(.white).tint(ContentView.pink)
                     .onChange(of: settings.avoidHighway) { _ in navi.replan() }
                 if navi.calculating || navi.routeOptions.isEmpty {
-                    Text(navi.calculating ? "正在规划路线…" : navi.info).font(.footnote).foregroundColor(ContentView.sub)
+                    Text(navi.calculating ? "正在规划路线…" : Self.userMessage(navi.info)).font(.footnote).foregroundColor(ContentView.sub)
                 }
                 if navi.planFailed && !navi.calculating {   // iOS v0.6 规划失败 / 超时
                     Button { navi.replan() } label: {
@@ -405,9 +430,8 @@ struct ContentView: View {
                 Spacer()
                 if navi.cruising { Text("进行中 · \(navi.uiSpeed) km/h").font(.caption).foregroundColor(ContentView.cyan) }
             }
-            Text("不设目的地：骑车时提醒前方测速、电子眼和急弯、学校、事故多发等道路安全提示，圆屏照常显示小地图")
+            Text("不设目的地，也能查看地图和道路提醒")
                 .font(.caption).foregroundColor(ContentView.sub)
-            if navi.cruising { Text(navi.info).font(.footnote).foregroundColor(ContentView.sub) }
             PillButton(title: navi.cruising ? "结束巡航" : "开始巡航", color: navi.cruising ? Color.gray : ContentView.cyan.opacity(0.8),
                        enabled: !navi.navigating && !WebMotorSession.shared.running) {
                 cruiseNote = ""
@@ -426,48 +450,34 @@ struct ContentView: View {
                 ForEach(Settings.bootBrands.indices, id: \.self) { i in Text(Settings.bootBrands[i]).tag(i) }
             }.tint(ContentView.cyan)
             Text(settings.bootStatus).font(.caption).foregroundColor(ContentView.sub)
-            Toggle("蓝牙媒体按键（QQ 音乐等）", isOn: $settings.musicHID).foregroundColor(.white).tint(ContentView.pink)
+            Toggle("音乐控制", isOn: $settings.musicHID).foregroundColor(.white).tint(ContentView.pink)
             if settings.musicHID {
                 Text(ble.mediaHIDSupported
-                     ? (ble.mediaHIDReady && ble.mediaHIDMode ? "媒体按键已就绪" : ble.mediaAMSControls > 0 && ble.mediaHIDMode ? "AMS 媒体控制已就绪，HID 当前不可用" : "请在 iPhone 设置 → 蓝牙中配对 MotoNav；按圆屏配对码提示完成")
-                     : "需要圆屏 HID 固件 v7.9.0 或更新版，连接后自动同步")
+                     ? (ble.mediaHIDReady && ble.mediaHIDMode ? "媒体按键已就绪" : ble.mediaAMSControls > 0 && ble.mediaHIDMode ? "音乐控制已就绪" : "请在 iPhone 设置 → 蓝牙中配对 MotoNav；按圆屏配对码提示完成")
+                     : "请连接圆屏并更新到支持音乐控制的固件")
                     .font(.caption).foregroundColor(ContentView.sub)
                 if !ble.mediaSongInfo.isEmpty {
                     Text(ble.mediaSongInfo).font(.caption).foregroundColor(ContentView.cyan)
                 }
                 Toggle("显示逐句歌词", isOn: $settings.musicLyrics).foregroundColor(.white).tint(ContentView.pink)
-                Text("默认关闭，上方歌名、下方歌手。开启后按歌曲信息从 LRCLIB 匹配歌词，歌词显示在歌手下方；未匹配到时保留歌名和歌手。")
+                Text("开启后自动匹配歌词，未匹配到时显示歌名和歌手。")
                     .font(.caption).foregroundColor(ContentView.sub)
                 if !settings.musicLyrics && ble.mediaLyricsActive { Text("正在关闭圆屏歌词…").font(.caption).foregroundColor(ContentView.sub) }
                 if settings.musicLyrics {
-                    Text(ble.mediaLyricsSupported ? ble.mediaLyricsStatus : "需要圆屏固件 v7.11.0 或更新版")
+                    Text(ble.mediaLyricsSupported ? "播放音乐后自动匹配歌词" : "请更新圆屏固件以显示歌词")
                         .font(.caption).foregroundColor(ContentView.cyan)
                 }
-                Text("先在网易云或 QQ 音乐开始播放，再用圆屏控制。新固件通过 iPhone AMS 显示歌名、歌手和状态，信息取决于当前播放器提供的内容。HID SENT 表示按键已发送。")
+                Text("先在音乐 App 中播放，再用圆屏切歌或暂停。歌名和歌手由播放器提供。")
                     .font(.caption).foregroundColor(ContentView.sub)
             } else {
                 Button("授权 Apple Music 圆屏控制") { MusicBridge.shared.authorize() }
                     .foregroundColor(ContentView.cyan)
             }
-            Text("关闭蓝牙媒体按键后，改用系统音乐 App 控制。不读取来电号码。巡航连续停车 10 分钟自动结束。")
+            Text("巡航连续停车 10 分钟后自动结束。")
                 .font(.caption).foregroundColor(ContentView.sub)
             Text("圆屏方向").foregroundColor(.white).padding(.top, 6)
             RotationDial(degrees: $settings.rotationDeg)      // iOS v0.5.1 按住圆盘转动调角度
-            Text("按住圆盘转动（顺时针为正），粉色指针是画面上方在圆屏上朝的方向，圆屏会跟着实时转。转到 0°/90°/180°/270° 附近会吸住。任意角度要圆屏固件 v7.10.1；旧固件会转到最接近的 90°")
-                .font(.caption2).foregroundColor(ContentView.sub)
-            // iOS v0.6 屏幕刷新速度、快速刷屏（圆屏存起来并自动重启；当前值来自圆屏的帧率回报）
-            Text("刷新速度").foregroundColor(.white).padding(.top, 6)
-            Picker("刷新速度", selection: Binding(get: { ble.screenMHz }, set: { ble.setScreenMHz($0) })) {
-                Text("40 标准").tag(40); Text("60").tag(60); Text("80").tag(80)
-            }
-            .pickerStyle(.segmented)
-            .disabled(!ble.isReady)
-            Toggle("快速刷屏", isOn: Binding(get: { ble.screenFast == 1 }, set: { ble.setScreenFast($0) }))
-                .foregroundColor(.white).tint(ContentView.pink)
-                .disabled(!ble.isReady)
-            Text(ble.screenMHz < 0
-                 ? "越快画面撕裂越轻；花屏就切回 40、关掉快速刷屏。切换后圆屏会自动重启。现在的值要等圆屏显示过小地图才知道"
-                 : "越快画面撕裂越轻；花屏就切回 40、关掉快速刷屏。切换后圆屏会自动重启")
+            Text("拖动圆盘调整方向，粉色指针代表画面上方。")
                 .font(.caption2).foregroundColor(ContentView.sub)
             Toggle("亮度跟着昼夜自动调", isOn: $settings.brightAuto).foregroundColor(.white).tint(ContentView.pink)
             if settings.brightAuto {
@@ -499,7 +509,6 @@ struct ContentView: View {
             Picker("预判", selection: $settings.leadMs) {
                 Text("关闭").tag(0); Text("0.3秒").tag(300); Text("0.6秒").tag(600)
             }.pickerStyle(.segmented)
-            Text("地图状态：\(map.shortStatus)").font(.caption).foregroundColor(Self.sub)
             HStack {
                 Text("风格").foregroundColor(.white)
                 Spacer()
@@ -511,17 +520,14 @@ struct ContentView: View {
             Text(Settings.themeDesc(settings.theme)).font(.caption2).foregroundColor(ContentView.sub)
             Toggle("小地图", isOn: $settings.mapOn).foregroundColor(.white).tint(ContentView.pink)
             if settings.mapOn {
-                Text("地图来源：高德（普通底图和卫星图）").font(.caption).foregroundColor(ContentView.sub)
                 if settings.mapSource == MapFeeder.SRC_AMAP && settings.theme == 1 {
                     Toggle("俯视建筑轮廓", isOn: $settings.buildings).foregroundColor(.white).tint(ContentView.pink)
-                    Text(ble.buildingsSupported ? "圆屏支持建筑图层，默认提取高德建筑俯视轮廓" : "正在查询圆屏建筑能力；确认前先显示普通底图")
-                        .font(.caption2).foregroundColor(ContentView.sub)
                     if ble.isReady && !ble.buildingsSupported {
-                        Button("重新查询建筑能力") { ble.retryBuildingCapability() }
+                        Text("当前圆屏暂不支持建筑轮廓，将显示普通地图。")
+                            .font(.caption).foregroundColor(Self.sub)
                     }
-                    if !map.buildingInfo.isEmpty { Text(map.buildingInfo).font(.caption).foregroundColor(ContentView.sub) }
                 }
-                Text(map.offlineStatus).font(.caption).foregroundColor(ContentView.sub)
+                Text(Self.userMessage(map.offlineStatus)).font(.caption).foregroundColor(ContentView.sub)
                 Text("选定路线后，前台自动下载沿途地图；锁屏使用已保存地图包。请等下载完成再出发。")
                     .font(.caption2).foregroundColor(ContentView.sub)
                 Text("走过的路线").foregroundColor(.white)
@@ -530,7 +536,7 @@ struct ContentView: View {
                 }
                 .pickerStyle(.segmented)
                 Toggle("清爽模式", isOn: $settings.clean).foregroundColor(.white).tint(ContentView.pink)
-                Text("清爽模式：地图保留，去掉红绿灯、电子眼、安全提示、测速牌和行程信息").font(.caption2).foregroundColor(ContentView.sub)
+                Text("仅保留地图和路线，隐藏其他提示").font(.caption2).foregroundColor(ContentView.sub)
             }
             Text("夜间配色").foregroundColor(.white)
             Picker("夜间配色", selection: $settings.nightMode) {
@@ -590,31 +596,17 @@ struct ContentView: View {
         return false
     }
 
-    // MARK: 调试信息
-    private var debugCard: some View {
-        CardView {
-            Button(showDebug ? "收起调试信息" : "调试信息") { showDebug.toggle() }.foregroundColor(ContentView.cyan)
-            if showDebug {
-                Text("""
-                圆屏：\(ble.status)
-                已发送 \(ble.sentCount) 条，最近：\(ble.lastSent)
-                \(ble.screenStats)
-                导航：\(navi.info)
-                路名：\(navi.uiRoad)
-                \(navi.laneRaw)
-                电子眼：\(navi.camRaw)
-                巡航：\(navi.cruiseRaw)
-                \(navi.extraInfo)
-                小地图：\(map.infoText)
-                地图数据累计发送 \(ble.bulkKB) KB
-                天气：\(weather.info)
-                """)
-                .font(.caption.monospaced())
-                .foregroundColor(ContentView.sub)
-                .textSelection(.enabled)
-            }
+    /// Product-facing recovery hints; raw SDK, URL and transport details stay out of the interface.
+    static func userMessage(_ raw:String)->String {
+        let value=raw.trimmingCharacters(in:.whitespacesAndNewlines)
+        if value.range(of:#"https?://|NSURLError|Error Domain=|AMapError|HTTP|\bSDK\b|\bGCJ|\bWGS|数据包|毫秒|字节|0x[0-9a-fA-F]+"#,options:.regularExpression) != nil {
+            if value.contains("登录") || value.contains("验证") { return "请完成高德登录或验证后重试" }
+            if value.contains("地图") { return "地图暂未准备完成，请保持 App 在前台后重试" }
+            return "暂时未能完成，请检查网络和服务配置后重试"
         }
+        return value
     }
+
 }
 
 // MARK: - 小组件

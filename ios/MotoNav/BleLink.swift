@@ -28,7 +28,7 @@ final class BleLink: NSObject, ObservableObject {
     @Published private(set) var mediaHIDSupported = false
     @Published private(set) var mediaHIDReady = false
     @Published private(set) var mediaHIDMode = false
-    private var verified = false
+    @Published private(set) var verified = false
     private var buildingProbe = BleCapabilityProbe()
     private var buildingQueries: Int { buildingProbe.attempts }
     private var txNotifyReady = false
@@ -86,6 +86,16 @@ final class BleLink: NSObject, ObservableObject {
                   Date().timeIntervalSince(self.lastWriteAt) > 1.5 else { return }
             self.send("P")
         }
+    }
+
+    var connectionSummary:String {
+        if isReady { return verified ? "圆屏已连接" : "请按圆屏提示完成配对" }
+        if status.contains("权限") { return "请在 iPhone 设置中允许蓝牙访问" }
+        if status.contains("没打开") { return "请打开 iPhone 蓝牙" }
+        if status.contains("搜索") { return "正在搜索圆屏…" }
+        if status.contains("连接") && !status.contains("未连接") { return "正在连接圆屏…" }
+        if status.contains("不可用") || status.contains("找不到") { return "圆屏暂不可用，请检查电源后重试" }
+        return "圆屏未连接"
     }
 
     // MARK: - 连接

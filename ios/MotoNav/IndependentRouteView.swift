@@ -61,7 +61,7 @@ struct MotorLoginView:View {
             VStack{
                 Text("仅在登录或验证时打开网页。登录保存在本机，正常规划可直接在 App 完成。").font(.caption).padding()
                 MotorBrowserView(browser:browser)
-                Text(browser.status).font(.caption)
+                Text(ContentView.userMessage(browser.status)).font(.caption)
             }.navigationTitle("高德登录／验证").toolbar{ToolbarItem(placement:.confirmationAction){Button("完成"){dismiss()}}}
         }.onAppear{if let page=page{browser.web.load(URLRequest(url:page))}}
     }
@@ -90,9 +90,9 @@ struct IndependentPlannerView:View {
                         Button("路线历史"){showHistory=true};Spacer()
                         if mode == .motorcycle{Button("高德登录／验证"){login=true}}
                     }.font(.subheadline)
-                    if !model.message.isEmpty{Text(model.message).font(.footnote).foregroundColor(ContentView.sub)}
+                    if !model.message.isEmpty{Text(ContentView.userMessage(model.message)).font(.footnote).foregroundColor(ContentView.sub)}
                     if let route=selectedRoute{routeOptions(route)}
-                    Text(mode == .motorcycle ? "摩托车路线由高德网页服务规划；账号过期时请完成登录或验证。":"使用高德 iOS SDK 自行车规划。").font(.caption).foregroundColor(ContentView.sub)
+                    Text(mode == .motorcycle ? "账号过期时，可在这里重新登录高德。":"自行车路线将按骑行方式规划。").font(.caption).foregroundColor(ContentView.sub)
                     Text("锁屏前请等待沿线底图准备；后台继续定位、语音和蓝牙，尚未准备的地图需回前台下载。").font(.caption).foregroundColor(ContentView.sub)
                 }.padding(16)
             }.background(ContentView.bg).navigationTitle("\(mode.rawValue)路线")
@@ -170,7 +170,7 @@ struct IndependentNavigationView: View {
                     VStack(alignment:.leading,spacing:6){
                         Text(NaviBridge.distText(guide.turnMetres)).font(.system(size:30,weight:.heavy))
                         Text(guide.instruction).font(.headline).lineLimit(2)
-                        Text(guide.status).font(.caption).foregroundColor(ContentView.sub)
+                        Text(guide.rerouting ? "偏离路线，正在重新规划…" : guide.simulation ? "模拟导航" : guide.status.contains("GPS") ? "定位信号较弱" : "").font(.caption).foregroundColor(ContentView.sub)
                     };Spacer(minLength:0)
                 }.padding(18).background(RoundedRectangle(cornerRadius:22).fill(ContentView.bg.opacity(0.94)))
                 Spacer()
@@ -180,7 +180,6 @@ struct IndependentNavigationView: View {
                         Spacer()
                         VStack(alignment:.trailing){Text("剩余 \(NaviBridge.distText(guide.remaining))").bold();Text("约 \(NaviBridge.durText(guide.remainingSeconds))").font(.caption)}
                     }
-                    if !metadata.status.isEmpty {Text(metadata.status).font(.caption2).foregroundColor(ContentView.sub)}
                     HStack{
                         Button("全览／跟随"){guide.overview.toggle()};Spacer()
                         Button(settings.voiceMuted ? "取消静音" : "静音"){settings.voiceMuted.toggle();if settings.voiceMuted{Speech.shared.stopNow()}}
