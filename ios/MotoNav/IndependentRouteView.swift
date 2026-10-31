@@ -170,7 +170,7 @@ struct IndependentNavigationView: View {
                     VStack(alignment:.leading,spacing:6){
                         Text(NaviBridge.distText(guide.turnMetres)).font(.system(size:30,weight:.heavy))
                         Text(guide.instruction).font(.headline).lineLimit(2)
-                        Text(guide.rerouting ? "偏离路线，正在重新规划…" : guide.simulation ? "模拟导航" : guide.status.contains("GPS") ? "定位信号较弱" : "").font(.caption).foregroundColor(ContentView.sub)
+                        Text(guide.status.contains("正在重新规划") ? "偏离路线，正在重新规划…" : guide.simulation ? "模拟导航" : guide.status.contains("GPS") ? "定位信号较弱" : "").font(.caption).foregroundColor(ContentView.sub)
                     };Spacer(minLength:0)
                 }.padding(18).background(RoundedRectangle(cornerRadius:22).fill(ContentView.bg.opacity(0.94)))
                 Spacer()

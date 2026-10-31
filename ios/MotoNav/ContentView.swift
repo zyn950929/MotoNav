@@ -404,7 +404,7 @@ struct ContentView: View {
             do{
                 let r=try await AmapWebSession.loadShare(t)
                 guard shareImportID==sequence,!navi.navigating,!WebMotorSession.shared.running else{shareStatus="导航状态已改变，请结束后重新导入";return}
-                shareStatus="已读取：\(r.kind)路线 \(NaviBridge.distText(r.distance>0 ? r.distance:Int(r.total)))"+
+                shareStatus="已读取：\(r.kind)路线 \(NaviBridge.distText(r.distance>0 ? r.distance:Int(r.total)))" +
                     (r.restored ? "":"（高德未确认原样还原，请核对地图）")
                 pendingShare=""
                 let name=r.endName.isEmpty ? "分享的目的地":r.endName
