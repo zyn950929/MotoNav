@@ -6,17 +6,34 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: motonav-ios-parity-016
+  cancel-in-progress: true
 jobs:
   ipa:
     runs-on: macos-26
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods/repos
+          key: ios-pods-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
       - name: Install locked dependencies
+        timeout-minutes: 10
         working-directory: ios
         run: |
           sudo gem install cocoapods -v 1.16.2 --no-document
           pod _1.16.2_ install --deployment
+      - uses: actions/cache/save@v4
+        if: success()
+        with:
+          path: |
+            ~/Library/Caches/CocoaPods
+            ~/.cocoapods/repos
+          key: ios-pods-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
       - name: Verify navigation, BLE clock and route history
         run: |
           set -euo pipefail

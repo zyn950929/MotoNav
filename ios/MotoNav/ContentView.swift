@@ -20,6 +20,8 @@ struct ContentView: View {
     @State private var showWebMotor = false
     @State private var independentMode: IndependentMode = .motorcycle
     @State private var showRides = false
+    @State private var showScreens=false
+    @State private var confirmForgetPhones=false
     @AppStorage("voice_rate") private var voiceRate = Double(AVSpeechUtteranceDefaultSpeechRate)
     @AppStorage("voice_pitch") private var voicePitch = 1.0
     @AppStorage("voice_id") private var voiceID = ""
@@ -85,6 +87,11 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .fullScreenCover(isPresented: $showWebMotor) { WebMotorView(mode:independentMode) }
         .sheet(isPresented: $showRides) { NavigationView { RideHistoryView() } }
+        .sheet(isPresented:$showScreens) { screenPicker }
+        .confirmationDialog("让圆屏忘掉其他手机？",isPresented:$confirmForgetPhones,titleVisibility:.visible) {
+            Button("忘掉其他手机",role:.destructive){ble.forgetOtherPhones()}
+            Button("取消",role:.cancel){}
+        } message: {Text("当前手机保留配对，其他手机以后需要重新配对。")}
         .fullScreenCover(isPresented: $showNavi) { NaviScreen() }
         .sheet(isPresented: $showKeys) { KeySetupView() }
         .sheet(isPresented:$showShareVerification){
@@ -174,6 +181,23 @@ struct ContentView: View {
     }
 
     // MARK: 圆屏状态
+    private var screenPicker:some View {
+        NavigationView {
+            List {
+                Section {
+                    Text("选择圆屏，编号可在圆屏首页查看。").font(.subheadline).foregroundColor(Self.sub)
+                    if ble.availableScreens.isEmpty {Text("正在搜索附近圆屏…")}
+                    ForEach(ble.availableScreens){screen in
+                        Button(screen.name){ble.selectScreen(screen.id);showScreens=false}
+                    }
+                }
+            }.navigationTitle("选择圆屏").toolbar {
+                ToolbarItem(placement:.cancellationAction){Button("取消"){showScreens=false}}
+                ToolbarItem(placement:.confirmationAction){Button("重新搜索"){ble.beginScreenSelection()}}
+            }
+        }.onAppear{ble.beginScreenSelection()}.onDisappear{ble.endScreenSelection()}.preferredColorScheme(.dark)
+    }
+
     private var statusCard: some View {
         CardView {
             HStack {
@@ -184,6 +208,8 @@ struct ContentView: View {
                     .foregroundColor(ContentView.cyan)
             }
             Text(ble.connectionSummary).font(.footnote).foregroundColor(ContentView.sub)
+            Button("换一块圆屏"){showScreens=true}.foregroundColor(Self.cyan)
+            Button("忘掉其他手机",role:.destructive){confirmForgetPhones=true}.disabled(!ble.isReady || !ble.verified)
             if navi.navigating {
                 Text("导航中：\(navi.uiDir) \(navi.uiDist) 米 · \(navi.uiSpeed) km/h").font(.footnote).foregroundColor(ContentView.cyan)
                 if navi.uiRemainM > 0 {
