@@ -106,6 +106,7 @@ final class MapFeeder: ObservableObject {
         workToken.cancel(); requestSerial += 1; routeBuildSerial += 1; fetching = false
     }
     func resetChunk() {
+        Settings.shared.syncBuildingContinuity()
         handoff.clear();confirmedCenter=nil;deferredRoofs=nil;upgradeBase=nil;lastRoofUpgradeProbe = .distantPast
         buildingInfo = ""; lastBuildingTry = .distantPast
         workToken.cancel(); requestSerial += 1; fetching = false
@@ -325,6 +326,12 @@ final class MapFeeder: ObservableObject {
             status="底图尚未准备完整，保留已有地图";return
         }
         let complete = RasterPacket.isBuilding(b)
+        if haveChunk,chunkType==type,chunkSat==sat,chunkBuildingsComplete,!complete,
+           abs(cx-chunkCx)<1,abs(cy-chunkCy)<1 {
+            // A repeated base callback is not a newer building observation.
+            // Preserve already-delivered or in-flight detail at the same location.
+            MapPipelineTrace.event("roof-downgrade-blocked",["id":chunkId]);return
+        }
         if haveChunk, chunkType == type, chunkSat == sat, abs(cx - chunkCx) < 1, abs(cy - chunkCy) < 1,
            !complete, !chunkAcked {
             MapPipelineTrace.event("base-kept-inflight", ["id": chunkId])

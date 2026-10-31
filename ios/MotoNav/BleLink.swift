@@ -263,7 +263,7 @@ final class BleLink: NSObject, ObservableObject {
         if msg.hasPrefix("#TIME,"){sendClock(msg);return}
         let k = keyOf(msg)
         if msg == "C" {                                 // 清屏：状态全部忘掉（亮度、风格、方向这些设置除外）
-            let keep: Set<String> = ["#b", "#t", "#R", "#Q", "#n", "#m", "#r", "#w"]
+            let keep: Set<String> = ["#b", "#t", "#BC", "#R", "#Q", "#n", "#m", "#r", "#w"]
             lastState = lastState.filter { keep.contains($0.key) }
             stateOrder = stateOrder.filter { keep.contains($0) }
             lastImg.removeAll()

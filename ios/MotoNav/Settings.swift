@@ -197,6 +197,9 @@ final class Settings: ObservableObject {
     }
 
     /// 连上圆屏时把所有设置发一遍
+    func syncBuildingContinuity() {
+        BleLink.shared.send(theme==1 && buildings && mapOn && mapSource==MapFeeder.SRC_AMAP ? "#BC,1":"#BC,0")
+    }
     func pushAll() {
         let b = BleLink.shared
         syncBootBrand()
@@ -204,6 +207,7 @@ final class Settings: ObservableObject {
         MusicBridge.shared.refresh(force: true)
         applyDayNight(force: true)                      // 亮度、夜间配色
         b.send(MapStyleTransfer.command(theme))
+        syncBuildingContinuity()
         b.send(rotationMsg)
         b.send(curve ? "#Q,1" : "#Q,0")
         b.send(mapOn ? "#m,1" : "#m,0")

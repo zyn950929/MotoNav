@@ -1,14 +1,14 @@
-name: iOS 0.16 route map clock and music fixes build10
+name: iOS 0.16 route map clock and music fixes build11
 on:
   push:
-    branches: [codex/ios-016-building-restore-20261031]
+    branches: [codex/ios-016-building-continuity-20261031]
     paths: ['ios/**', '.github/workflows/ios-ui-aligned-016.yml']
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: motonav-ios-building-restore-build10
+  group: motonav-ios-building-continuity-build11
   cancel-in-progress: true
 jobs:
   ipa:
@@ -27,6 +27,8 @@ jobs:
           /tmp/map-wire
           clang++ -std=c++17 ios/tests/map-wire/receiver.cpp -o /tmp/bulk-receiver
           /tmp/bulk-receiver
+          clang++ -std=c++17 -O2 ios/tests/building-continuity/main.cpp -o /tmp/building-continuity
+          /tmp/building-continuity
       - uses: actions/cache/restore@v4
         id: pods
         with:
@@ -85,18 +87,18 @@ jobs:
           set -euo pipefail
           APP="$RUNNER_TEMP/Derived/Build/Products/Release-iphoneos/MotoNav.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Info.plist")" = '0.16.0'
-          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Info.plist")" = '10'
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Info.plist")" = '11'
           test -f "$APP/PlugIns/MotoNavShare.appex/MotoNavShare"
           mkdir -p output/ios "$RUNNER_TEMP/Stage/Payload"
           ditto "$APP" "$RUNNER_TEMP/Stage/Payload/MotoNav.app"
           xcrun strip -S "$RUNNER_TEMP/Stage/Payload/MotoNav.app/MotoNav"
           xcrun strip -S "$RUNNER_TEMP/Stage/Payload/MotoNav.app/PlugIns/MotoNavShare.appex/MotoNavShare"
-          (cd "$RUNNER_TEMP/Stage" && zip -qry "$GITHUB_WORKSPACE/output/ios/MotoNav-0.16.0-building-restore-build10-unsigned.ipa" Payload)
+          (cd "$RUNNER_TEMP/Stage" && zip -qry "$GITHUB_WORKSPACE/output/ios/MotoNav-0.16.0-building-continuity-build11-unsigned.ipa" Payload)
           (cd output/ios && shasum -a 256 *.ipa > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: MotoNav-iOS-0.16.0-BuildingRestore-Build10
+          name: MotoNav-iOS-0.16.0-BuildingContinuity-Build11
           path: |
             output/ios/
             build-ios.log
