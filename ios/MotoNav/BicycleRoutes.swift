@@ -91,7 +91,9 @@ final class BicycleRouteQuery: NSObject {
         guard request.vias.isEmpty else { finish(.failure(AmapShare.Fail("自行车规划暂不支持途经点")));return }
         api=AMapSearchAPI(); api?.delegate=(self as AnyObject) as? AMapSearchDelegate
         let r=AMapRidingRouteSearchRequest()
-        r.requireExtension=true
+        // AMapSearch 9.7.5: Cost (1<<1), Navi (1<<2), Polyline (1<<3).
+        // Omitting these fields can return a path without usable step geometry.
+        r.showFieldsType = AMapRidingRouteShowFieldsType(rawValue: (1 << 1) | (1 << 2) | (1 << 3))
         r.origin=AMapGeoPoint.location(withLatitude:CGFloat(request.start.lat),longitude:CGFloat(request.start.lng))
         r.destination=AMapGeoPoint.location(withLatitude:CGFloat(request.end.lat),longitude:CGFloat(request.end.lng))
         let work=DispatchWorkItem { [weak self] in self?.finish(.failure(AmapShare.Fail("自行车规划超时，请检查网络、定位和高德 iOS Key"))) }
