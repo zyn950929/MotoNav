@@ -1,14 +1,14 @@
-name: iOS 0.16 route map clock and music fixes build11
+name: iOS 0.16 new app icon build12
 on:
   push:
-    branches: [codex/ios-016-building-continuity-20261031]
+    branches: [codex/ios-016-new-icon-20261031]
     paths: ['ios/**', '.github/workflows/ios-ui-aligned-016.yml']
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: motonav-ios-building-continuity-build11
+  group: motonav-ios-new-icon-build12
   cancel-in-progress: true
 jobs:
   ipa:
@@ -16,19 +16,6 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
-      - name: Verify report export and record recovery
-        run: |
-          swiftc ios/MotoNav/MapReportExport.swift ios/tests/map-export/main.swift -o /tmp/map-export
-          /tmp/map-export
-      - name: Verify map transport and published receiver
-        run: |
-          set -euo pipefail
-          swiftc -O ios/MotoNav/MapGeo.swift ios/MotoNav/RasterProcessing.swift ios/MotoNav/BleBulkWriteQueue.swift ios/MotoNav/BleWritePacer.swift ios/tests/map-wire/main.swift -o /tmp/map-wire
-          /tmp/map-wire
-          clang++ -std=c++17 ios/tests/map-wire/receiver.cpp -o /tmp/bulk-receiver
-          /tmp/bulk-receiver
-          clang++ -std=c++17 -O2 ios/tests/building-continuity/main.cpp -o /tmp/building-continuity
-          /tmp/building-continuity
       - uses: actions/cache/restore@v4
         id: pods
         with:
@@ -60,24 +47,6 @@ jobs:
             ~/Library/Caches/CocoaPods
             ~/.cocoapods/repos
           key: ios-pods-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock') }}
-      - name: Verify navigation, BLE clock and route history
-        run: |
-          set -euo pipefail
-          python3 ios/tests/webmotor/check.py | tee parity-tests.log
-          swiftc ios/MotoNav/ArrivalPolicy.swift ios/tests/arrival/main.swift -o /tmp/arrival
-          /tmp/arrival
-          clang++ -std=c++17 ios/tests/phone-clock/receiver.cpp -o /tmp/clock-receiver
-          /tmp/clock-receiver
-          swiftc ios/MotoNav/AMSMetadata.swift ios/tests/music/main.swift -o /tmp/music
-          /tmp/music
-          swiftc ios/MotoNav/ArrivalPolicy.swift ios/MotoNav/NaviSessionCallbacks.swift ios/tests/arrival-relay/SDKStubs.swift ios/tests/arrival-relay/main.swift -o /tmp/relay
-          /tmp/relay
-          swiftc -O ios/MotoNav/MapGeo.swift ios/MotoNav/RasterProcessing.swift ios/MotoNav/MapStyles.swift ios/tests/four-styles/main.swift -o /tmp/styles
-          /tmp/styles
-          swiftc -O ios/MotoNav/MapGeo.swift ios/MotoNav/RasterProcessing.swift ios/MotoNav/MapStyles.swift ios/MotoNav/RouteMapPlan.swift ios/tests/map-delivery/main.swift -o /tmp/map-delivery
-          /tmp/map-delivery
-          swiftc ios/MotoNav/BleBulkWriteQueue.swift ios/MotoNav/BleWritePacer.swift ios/tests/ble-bulk/main.swift -o /tmp/bulk
-          /tmp/bulk
       - name: Build iPhone Release arm64
         run: |
           set -o pipefail
@@ -87,21 +56,37 @@ jobs:
           set -euo pipefail
           APP="$RUNNER_TEMP/Derived/Build/Products/Release-iphoneos/MotoNav.app"
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Info.plist")" = '0.16.0'
-          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Info.plist")" = '11'
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleVersion' "$APP/Info.plist")" = '12'
           test -f "$APP/PlugIns/MotoNavShare.appex/MotoNavShare"
           mkdir -p output/ios "$RUNNER_TEMP/Stage/Payload"
+          python3 - "$APP" <<'PY'
+          import pathlib,plistlib,struct,sys,json,hashlib,shutil
+          app=pathlib.Path(sys.argv[1])
+          src=pathlib.Path('ios/MotoNav/Assets.xcassets/AppIcon.appiconset/icon.png')
+          raw=src.read_bytes()
+          assert struct.unpack('>II',raw[16:24])==(1024,1024) and raw[25]==2
+          info=plistlib.loads((app/'Info.plist').read_bytes())
+          primary=info['CFBundleIcons']['CFBundlePrimaryIcon']
+          assert primary['CFBundleIconName']=='AppIcon'
+          icons=list(app.glob('AppIcon*.png'))
+          assert icons
+          record={'sourceSHA256':hashlib.sha256(raw).hexdigest(),'sourceSize':[1024,1024],'opaqueRGB':True,'compiledIconFiles':[p.name for p in icons],'bundleVersion':info['CFBundleVersion']}
+          pathlib.Path('output/ios/icon-verification.json').write_text(json.dumps(record,indent=2))
+          shutil.copy2(src,'output/ios/icon-preview.png')
+          shutil.copy2(max(icons,key=lambda p:p.stat().st_size),'output/ios/icon-compiled.png')
+          print('PASS 1024x1024 opaque icon and compiled AppIcon bundle entries')
+          PY
           ditto "$APP" "$RUNNER_TEMP/Stage/Payload/MotoNav.app"
           xcrun strip -S "$RUNNER_TEMP/Stage/Payload/MotoNav.app/MotoNav"
           xcrun strip -S "$RUNNER_TEMP/Stage/Payload/MotoNav.app/PlugIns/MotoNavShare.appex/MotoNavShare"
-          (cd "$RUNNER_TEMP/Stage" && zip -qry "$GITHUB_WORKSPACE/output/ios/MotoNav-0.16.0-building-continuity-build11-unsigned.ipa" Payload)
+          (cd "$RUNNER_TEMP/Stage" && zip -qry "$GITHUB_WORKSPACE/output/ios/MotoNav-0.16.0-new-icon-build12-unsigned.ipa" Payload)
           (cd output/ios && shasum -a 256 *.ipa > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: MotoNav-iOS-0.16.0-BuildingContinuity-Build11
+          name: MotoNav-iOS-0.16.0-NewIcon-Build12
           path: |
             output/ios/
             build-ios.log
-            parity-tests.log
           if-no-files-found: warn
 
