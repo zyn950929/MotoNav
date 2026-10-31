@@ -17,7 +17,7 @@ struct RoutePointPicker: View {
                         Button("搜索"){runSearch()}
                     }
                     Button("搜索附近加油站"){query="加油站";search.searchFuel(near:near.map{($0.lat,$0.lng)})}
-                    if !search.status.isEmpty{Text(search.status).font(.caption)}
+                    if !search.status.isEmpty{Text(ContentView.userMessage(search.status)).font(.caption)}
                 }
                 if !search.results.isEmpty {
                     Section("搜索结果") {ForEach(search.results){p in pointRow(p)}}
@@ -33,7 +33,7 @@ struct RoutePointPicker: View {
         HStack {
             Button {choose(MotorPoint(lat:p.lat,lng:p.lng,name:p.name));dismiss()} label:{
                 VStack(alignment:.leading,spacing:4){Text(p.name);Text(p.address).font(.caption).foregroundColor(.secondary)}
-            }
+            }.buttonStyle(.borderless)
             Spacer()
             Button{favorites.add(p)}label:{Image(systemName:"star")}.buttonStyle(.borderless).accessibilityLabel("收藏\(p.name)")
         }
@@ -54,14 +54,14 @@ struct RouteWaypointEditor: View {
         NavigationView {
             List {
                 Section("按顺序经过，最多三个") {
-                    ForEach(draft.indices,id:\.self){i in
+                    ForEach(Array(draft.enumerated()),id:\.offset){i,point in
                         VStack(alignment:.leading,spacing:10){
-                            Button("途经 \(i+1)：\(draft[i].name.isEmpty ? "已选地点":draft[i].name)"){pick=Pick(index:i)}
+                            Button("途经 \(i+1)：\(point.name.isEmpty ? "已选地点":point.name)"){pick=Pick(index:i)}
                             HStack {
                                 Button("上移"){move(i,-1)}.disabled(i==0)
                                 Button("下移"){move(i,1)}.disabled(i==draft.count-1)
                                 Spacer()
-                                Button("删除",role:.destructive){draft.remove(at:i)}
+                                Button("删除",role:.destructive){if draft.indices.contains(i){draft.remove(at:i)}}
                             }.buttonStyle(.borderless).font(.caption)
                         }.padding(.vertical,5)
                     }

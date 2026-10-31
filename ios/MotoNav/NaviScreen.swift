@@ -182,7 +182,7 @@ struct NaviScreen: View {
     private var arrivedCard: some View {
         VStack(spacing: 8) {
             Image(systemName: "flag.checkered").font(.system(size: 40, weight: .bold)).foregroundColor(Color(red: 1, green: 0.31, blue: 0.71))
-            Text(navi.info).font(.title2.bold()).foregroundColor(.white)
+            Text("已到达目的地").font(.title2.bold()).foregroundColor(.white)
             Text("马上回到主界面").font(.footnote).foregroundColor(.gray)
         }
         .padding(28)
