@@ -358,7 +358,12 @@ enum MapGeo {
         if sat > 0.10 && hue >= 60 && hue <= 170 { return PX_PARK }
         if sat > 0.18 && hue >= 10 && hue <= 60 { return PX_ROAD }        // 黄色、橙色的主干道
         let l=lum(c)
-        if l >= bgLum + 6 { return PX_ROAD }                          // 比底色亮的白色道路
+        // Pale land is a second background colour (typically luminance 248),
+        // not a road. A relative threshold alone crosses its resampling noise
+        // and turns nearly invisible 247/248 variations into a dark mesh.
+        // Match Android AmapRasterColors: reference 248 + contrast 6 = 254.
+        let whiteRoadLum = 254
+        if l >= whiteRoadLum { return PX_ROAD }
         return PX_BLOCK                                                    // 深色细线（楼块轮廓、图标、描边）不当道路
     }
 

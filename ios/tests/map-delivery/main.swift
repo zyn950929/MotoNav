@@ -24,6 +24,31 @@ check(meshPixels[400*size+400]==MapGeo.PX_BLOCK,"two-dimensional gray texture ca
 var diagonal=[UInt32](repeating:0xffeeeeee,count:size*size)
 for y in 0..<size {for x in max(0,y-12)...min(size-1,y+12) {diagonal[y*size+x]=0xffd0d0d0}}
 check(MapGeo.classifyAmapBase(diagonal,w:size,h:size)[600*size+600]==MapGeo.PX_ROAD,"diagonal gray highway remains visible")
+// Real diagnostic colours, without geography or a user's map image.
+// The measured land mode is 242; the second land fill is about 248.
+// Their slight interpolation variation must never acquire the road material.
+let paleLand: [UInt32] = [0xfff8f9fb, 0xfff9f9fb, 0xfff8f7fc, 0xfff9f8fd,
+                         0xfff7f8fa, 0xfff8faf9, 0xffedf4fa]
+for bg in [238, 242, 248, 252] {
+    for color in paleLand { check(MapGeo.classifyPixel(color,bg)==MapGeo.PX_BLOCK,"pale land cannot become a white road") }
+    for color:UInt32 in [0xffffffff,0xfffeffff] {check(MapGeo.classifyPixel(color,bg)==MapGeo.PX_ROAD,"Android near-white pavement threshold stays stable")}
+    check(MapGeo.classifyPixel(0xffffdf70,bg)==MapGeo.PX_ROAD,"yellow main road remains")
+    check(MapGeo.classifyPixel(0xff80d8f5,bg)==MapGeo.PX_WATER,"blue river remains")
+    check(MapGeo.classifyPixel(0xffa0d890,bg)==MapGeo.PX_PARK,"park remains")
+}
+var pale=[UInt32](repeating:0xffedf4fa,count:size*size)
+for y in 150..<1050 {for x in 150..<1050 {
+    // Periodic variation represents resampling around a secondary land fill,
+    // not the earlier unrelated dark-gray roof regression.
+    pale[y*size+x] = paleLand[(x%7+y%11)%6]
+}}
+for y in 0..<size {for x in 580..<600 {pale[y*size+x]=0xffffffff}}
+check(MapGeo.backgroundLum(pale)==242,"reproduce measured 242 background mode")
+let palePixels=MapGeo.classifyAmapBase(pale,w:size,h:size)
+for y in 170..<1030 {for x in 170..<1030 where x<575 || x>605 {
+    check(palePixels[y*size+x]==MapGeo.PX_BLOCK,"no mesh anywhere inside the secondary land fill after cleanup and dilation")
+}}
+check(palePixels[600*size+590]==MapGeo.PX_ROAD,"continuous actual white road remains beside pale land")
 let packet=MapGeo.encodeRaster(frameId:1,x0:-1200,y0:1200,w:size,h:size,mmPerPx:2000,idx:pixels)
 let empty=MapGeo.encodeRaster(frameId:1,x0:-1200,y0:1200,w:size,h:size,mmPerPx:2000,idx:[UInt8](repeating:0,count:size*size))
 check(RasterPacket.valid(empty),"empty but structurally valid packet reproduces the old bug")
@@ -44,7 +69,7 @@ let folder=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().
 let cache=RouteMapCache(root:folder)
 let frame=MapGeo.Frame(refLat:30,refLng:104,id:1)
 let node=plan.nodes[0]
-let oldCache=folder.appendingPathComponent("styles-v1-1/v1-3-base/30.0_104.0/0_0.bin")
+let oldCache=folder.appendingPathComponent("styles-v2-1/v1-3-base/30.0_104.0/0_0.bin")
 try FileManager.default.createDirectory(at:oldCache.deletingLastPathComponent(),withIntermediateDirectories:true)
 try packet.write(to:oldCache)
 check(cache.read(frame:frame,source:3,buildings:false,node:node,style:1)==nil,"old over-broad gray classification cache must not be reused")
@@ -53,4 +78,4 @@ check(!FileManager.default.fileExists(atPath:oldCache.path),"obsolete gray-map c
 do {try cache.store(empty,frame:frame,source:3,node:node,style:1);fatalError("blank cache overwrite accepted")}catch{}
 check(cache.read(frame:frame,source:3,buildings:false,node:node,style:1)==packet,"valid cached map survives rejected blank update")
 try? FileManager.default.removeItem(at:folder)
-print("PASS gray and diagonal highways, apartment/mesh rejection, blank-frame protection, cache and 60/80/100/120 km/h handovers")
+print("PASS real-sample pale-land colours, resampling-mesh rejection, near-white roads, gray highways, old cache rejection and 60/80/100/120 km/h handovers")
