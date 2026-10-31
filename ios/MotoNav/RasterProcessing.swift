@@ -226,3 +226,42 @@ enum AmapBuildings {
         return RasterPacket.valid(packet) ? packet : incoming
     }
 }
+
+
+/// Keep essential roads in front of optional roofs on a measured, slow link.
+enum MapDeliveryPolicy {
+    static func roofsFit(kmh:Int,bytes:Int,rate:Double?)->Bool {
+        if kmh<60 {return true}
+        guard let rate=rate,rate.isFinite,rate>0 else {return false}
+        return Double(bytes)/rate<=4
+    }
+    static func mayPrepareRoofs(kmh:Int,rate:Double?)->Bool {
+        kmh<60 || (rate ?? 0)>=25000
+    }
+    /// Unlike a colour-only legacy conversion, re-RLE the merged runs so the
+    /// missing roof layer actually reduces bytes. No 1.44M-pixel expansion.
+    static func compactBase(_ data:Data)->Data {
+        guard RasterPacket.isBuilding(data),RasterPacket.valid(data) else {return data}
+        let raw=[UInt8](data)
+        var result=Data(raw.prefix(16));result[14]=UInt8(2000&255);result[15]=UInt8(2000>>8)
+        var p=16,last=UInt8(255),run=0
+        func flush() {
+            while run>0 {
+                let count=min(271,run)
+                if count<=15 {result.append(UInt8((count-1)<<4)|last)}
+                else {result.append(0xf0|last);result.append(UInt8(count-16))}
+                run-=count
+            }
+        }
+        while p<raw.count {
+            let v=raw[p];p+=1
+            var n=Int(v>>4)+1
+            if v>>4==15 {n+=Int(raw[p]);p+=1}
+            let original=v&15,color=original>3 ? original&2:original
+            if last != color {flush();last=color}
+            run+=n
+            while run>=271 {result.append(0xf0|last);result.append(255);run-=271}
+        }
+        flush();return result
+    }
+}

@@ -84,6 +84,8 @@ final class MapFeeder: ObservableObject {
     private var routeProgress = -1.0
     private var pose: (x: Double, y: Double, kmh: Int)?
     private var chunkBuildingsComplete = false
+    private var confirmedAt=Date.distantPast
+    private var lastRoofUpgradeProbe=Date.distantPast
     private var confirmedCenter: (x: Double, y: Double)?
     private var lastCoverageTrace = Date.distantPast
     private var buildingMode: Bool { Settings.shared.theme == 1 && Settings.shared.mapSource == Self.SRC_AMAP && Settings.shared.buildings && BleLink.shared.buildingsSupported }
@@ -101,7 +103,7 @@ final class MapFeeder: ObservableObject {
         workToken.cancel(); requestSerial += 1; routeBuildSerial += 1; fetching = false
     }
     func resetChunk() {
-        handoff.clear()
+        handoff.clear();confirmedCenter=nil;confirmedAt = .distantPast
         buildingInfo = ""; lastBuildingTry = .distantPast
         workToken.cancel(); requestSerial += 1; fetching = false
         haveChunk = false; lastFetchFail = .distantPast
@@ -232,15 +234,31 @@ final class MapFeeder: ObservableObject {
         let wanted = haveChunk && prepareEarly && !recovering ? (futureNode ?? node) : node
         let a = bearing * .pi / 180, ahead = kmh > 5 ? (satMode ? SAT_AHEAD : MapCoveragePolicy.lookahead(kmh: kmh, preferred: AHEAD)) : 0
         let targetX=wanted?.x ?? (x+sin(a)*ahead), targetY=wanted?.y ?? (y+cos(a)*ahead)
-        let alreadyPrepared=handoff.contains(cx:targetX,cy:targetY,style:Settings.shared.theme)
         let sameCurrent=haveChunk && abs(targetX-chunkCx)<1 && abs(targetY-chunkCy)<1
-        if !fetching && handoff.pending == nil && !alreadyPrepared && (!haveChunk || distance > refresh || needsCoverage || changedNode || (prepareEarly && !sameCurrent) || retryBuildings) && Date().timeIntervalSince(lastFetchFail) > 15 {
+        var cachedRoofUpgrade=false
+        if buildingMode,!chunkBuildingsComplete,sameCurrent,let node=wanted,let maps=offlineMaps,
+           MapDeliveryPolicy.mayPrepareRoofs(kmh:kmh,rate:BleLink.shared.mapBytesPerSecond),
+           Date().timeIntervalSince(confirmedAt)>=5,Date().timeIntervalSince(lastRoofUpgradeProbe)>=5 {
+            lastRoofUpgradeProbe=Date()
+            cachedRoofUpgrade=maps.read(node).map{RasterPacket.isBuilding($0) && MapDeliveryPolicy.roofsFit(kmh:kmh,bytes:$0.count,rate:BleLink.shared.mapBytesPerSecond)} ?? false
+        }
+        let alreadyPrepared=handoff.contains(cx:targetX,cy:targetY,style:Settings.shared.theme)
+        if !fetching && handoff.pending == nil && !alreadyPrepared && (!haveChunk || distance > refresh || needsCoverage || changedNode || (prepareEarly && !sameCurrent) || retryBuildings || cachedRoofUpgrade) && Date().timeIntervalSince(lastFetchFail) > 15 {
             fetchChunk(f,targetX,targetY,node:wanted)
         }
         checkResend()
     }
-    private func acceptChunk(_ b: Data, cx: Double, cy: Double, sat: Bool, type: Int, info: String, src: Int) {
+    private func acceptChunk(_ incoming: Data, cx: Double, cy: Double, sat: Bool, type: Int, info: String, src: Int) {
         guard enabled, Settings.shared.theme != 11 else { return }
+        let kmh=pose?.kmh ?? 0
+        let sameConfirmed=confirmedCenter.map{abs($0.x-cx)<1 && abs($0.y-cy)<1} ?? false
+        let allowRoofs=sameConfirmed && Date().timeIntervalSince(confirmedAt)>=5 &&
+            MapDeliveryPolicy.roofsFit(kmh:kmh,bytes:incoming.count,rate:BleLink.shared.mapBytesPerSecond)
+        let b=allowRoofs ? incoming:MapDeliveryPolicy.compactBase(incoming)
+        if b.count<incoming.count {
+            MapPipelineTrace.event("map-base-priority",["beforeBytes":incoming.count,"bytes":b.count,"kmh":kmh])
+            if kmh>=60 {buildingInfo="高速行驶优先保证底图，稍后补充建筑"}
+        }
         guard sat || MapStyleTransfer.matches(b,style:Settings.shared.theme) else {return}
         guard src != Self.SRC_AMAP || Settings.shared.theme != 1 || RasterPacket.hasMapContent(b) else {
             status="底图尚未准备完整，保留已有地图";return
@@ -251,7 +269,7 @@ final class MapFeeder: ObservableObject {
             MapPipelineTrace.event("base-kept-inflight", ["id": chunkId])
             return
         }
-        let displayBytes = buildingMode && src == Self.SRC_AMAP ? AmapBuildings.carry(b, known: chunkBytes) : b
+        let displayBytes = allowRoofs && buildingMode && src == Self.SRC_AMAP ? AmapBuildings.carry(b, known: chunkBytes) : b
         if haveChunk, chunkType == type, chunkSat == sat, abs(cx - chunkCx) < 1, abs(cy - chunkCy) < 1,
            displayBytes == chunkBytes {
             // Cached base then screenshot base often encode the exact same map.
@@ -418,7 +436,7 @@ final class MapFeeder: ObservableObject {
     func onAck(type: Int, id: Int) {
         if type == chunkType && id == chunkId {
             chunkAcked = true; status = "圆屏已收到地图"
-            confirmedCenter = (chunkCx, chunkCy)
+            confirmedCenter = (chunkCx, chunkCy);confirmedAt=Date()
             DispatchQueue.main.async { [weak self] in self?.flushPreparedMap() }
             MapPipelineTrace.event("map-ack", ["type": type, "id": id, "buildings": chunkBytes.map(RasterPacket.isBuilding) ?? false])
         }
@@ -522,7 +540,7 @@ final class MapTraceReport:ObservableObject {
         guard !recording && !exporting else {return}
         files=[];recording=true;status="正在记录地图衔接，最长 10 分钟。"
         MapPipelineTrace.begin()
-        MapPipelineTrace.event("session-start",["maxWrite":BleLink.shared.maxWrite,"ready":BleLink.shared.isReady])
+        MapPipelineTrace.event("session-start",["maxWrite":BleLink.shared.maxWrite,"ready":BleLink.shared.isReady,"style":Settings.shared.theme])
         timer=Timer.scheduledTimer(withTimeInterval:600,repeats:false){[weak self] _ in self?.finish()}
     }
     func finish() {
