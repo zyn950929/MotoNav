@@ -23,7 +23,7 @@ jobs:
       - name: Verify map transport and published receiver
         run: |
           set -euo pipefail
-          swiftc -O ios/MotoNav/MapGeo.swift ios/MotoNav/RasterProcessing.swift ios/MotoNav/BleBulkWriteQueue.swift ios/tests/map-wire/main.swift -o /tmp/map-wire
+          swiftc -O ios/MotoNav/MapGeo.swift ios/MotoNav/RasterProcessing.swift ios/MotoNav/BleBulkWriteQueue.swift ios/MotoNav/BleWritePacer.swift ios/tests/map-wire/main.swift -o /tmp/map-wire
           /tmp/map-wire
           clang++ -std=c++17 ios/tests/map-wire/receiver.cpp -o /tmp/bulk-receiver
           /tmp/bulk-receiver

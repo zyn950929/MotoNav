@@ -445,6 +445,7 @@ final class BleLink: NSObject, ObservableObject {
                 let response = responses && (clockCommand || !rx.properties.contains(.writeWithoutResponse) || bulkBarrier.needsResponse(seq: seq, parts: parts,
                     retry: part.attempts > 1, commandReady: p.canSendWriteWithoutResponse))
                 traceBulk(part, event: "bulk-write", response: response)
+                if part.type==3,seq==parts-1 {mapMeter.tailIssued(id:part.id)}
                 if response {
                     bulkWriteSerial += 1; let serial = bulkWriteSerial
                     attWriteStartedAt=ProcessInfo.processInfo.systemUptime

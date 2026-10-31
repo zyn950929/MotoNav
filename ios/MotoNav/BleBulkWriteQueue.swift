@@ -122,12 +122,17 @@ struct BleMapReceipt {
 }
 
 struct BleMapWireMeter {
-    private var transfer:(id:Int,bytes:Int,at:Double)?
+    private var transfer:(id:Int,bytes:Int,at:Double,tailIssued:Bool)?
     private(set) var rate:Double?
-    mutating func begin(id:Int,bytes:Int,at:Double) {transfer=(id,bytes,at)}
+    mutating func begin(id:Int,bytes:Int,at:Double) {transfer=(id,bytes,at,false)}
+    mutating func tailIssued(id:Int) {if transfer?.id==id {transfer?.tailIssued=true}}
     mutating func finish(id:Int,at now:Double)->(bytes:Int,seconds:Double)? {
         guard let p=transfer,p.id==id,now>p.at else {return nil}
-        transfer=nil;let seconds=now-p.at,sample=Double(p.bytes)/seconds
+        transfer=nil
+        // An already-decoded raster can acknowledge the first duplicate fragment.
+        // That confirms delivery, but cannot measure a whole raster's throughput.
+        guard p.tailIssued else {return nil}
+        let seconds=now-p.at,sample=Double(p.bytes)/seconds
         rate=rate.map{$0*0.65+sample*0.35} ?? sample
         return (p.bytes,seconds)
     }

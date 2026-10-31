@@ -31,9 +31,13 @@ receipt.begin(id:5,tail:Data([98]));_ = receipt.wireFinished(id:5,at:20)
 check(receipt.probe(now:20.31) != nil && receipt.probe(now:20.61) != nil && receipt.probe(now:21)==nil,"at most two small receipt probes")
 check(receipt.expire(now:21.9)==nil && receipt.expire(now:22.1)==5,"receipt wait is bounded without synthesizing success")
 var meter=BleMapWireMeter();meter.begin(id:1,bytes:112461,at:10.1493)
+meter.tailIssued(id:1)
 let sample=meter.finish(id:1,at:42.3957)!
 check(abs(sample.seconds-32.2464)<0.001 && (meter.rate ?? 0)<3500,"replay the actual first-map wire duration")
 check(meter.finish(id:1,at:42.7)==nil,"tail probes cannot inflate measured throughput")
+let measuredRate=meter.rate
+meter.begin(id:2,bytes:127289,at:50)
+check(meter.finish(id:2,at:50.18)==nil && meter.rate==measuredRate,"an early K for an already-decoded raster must not count the whole map as newly transmitted")
 let n=1200
 var idx=[UInt8](repeating:0,count:n*n)
 for y in 0..<n {for x in 590..<610 {idx[y*n+x]=1}}
