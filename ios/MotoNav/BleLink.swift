@@ -70,6 +70,7 @@ final class BleLink: NSObject, ObservableObject {
     private var lastImg: [Int: (w: Int, h: Int, data: Data)] = [:]
     private var imgId = [Int](repeating: 0, count: 13)
     private var phoneClock=PhoneClockSync()
+    private var clockWriteID=0
     private var clockObserver:NSObjectProtocol?
     private var heartbeat: Timer?
     private var lastWriteAt = Date.distantPast
@@ -226,7 +227,19 @@ final class BleLink: NSObject, ObservableObject {
         guard isReady,verified else{return}
         let now=Date()
         if let message=phoneClock.message(wall:now.timeIntervalSince1970,uptime:ProcessInfo.processInfo.systemUptime,
-            offset:TimeZone.current.secondsFromGMT(for:now),force:force){sendOnce(message)}
+            offset:TimeZone.current.secondsFromGMT(for:now),force:force){sendClock(message)}
+    }
+    private func sendClock(_ message:String) {
+        guard isReady,let p=peripheral,let rx=rxChar else {return}
+        let data=Data(message.utf8)
+        // #TIME is 22 bytes in UTC+8, exceeding a default 20-byte command write.
+        // Share the existing one-in-flight ATT queue so this write is acknowledged
+        // and never overlaps a map's acknowledged write. It is not an M packet.
+        if rx.properties.contains(.write),data.count<=p.maximumWriteValueLength(for:.withResponse) {
+            clockWriteID=(clockWriteID+1)&255
+            bulkQ.replace(type:0,id:clockWriteID,packets:[data],prioritize:true)
+            pump()
+        } else if data.count<=p.maximumWriteValueLength(for:.withoutResponse) {sendOnce(message)}
     }
 
     // MARK: - 发送
@@ -239,7 +252,7 @@ final class BleLink: NSObject, ObservableObject {
 
     /// 发一条文字消息（同类型只留最新）
     func send(_ msg: String) {
-        if msg.hasPrefix("#TIME,"){sendOnce(msg);return}
+        if msg.hasPrefix("#TIME,"){sendClock(msg);return}
         let k = keyOf(msg)
         if msg == "C" {                                 // 清屏：状态全部忘掉（亮度、风格、方向这些设置除外）
             let keep: Set<String> = ["#b", "#t", "#R", "#Q", "#n", "#m", "#r", "#w"]
@@ -391,10 +404,11 @@ final class BleLink: NSObject, ObservableObject {
                 return
             }
             if choice == .bulk, let part = bulkQ.next() {
-                let seq = Int(part.data[5]) | Int(part.data[6]) << 8
-                let parts = Int(part.data[3]) | Int(part.data[4]) << 8
-                let response = responses && bulkBarrier.needsResponse(seq: seq, parts: parts,
-                    retry: part.attempts > 1, commandReady: p.canSendWriteWithoutResponse)
+                let clockCommand=part.type == 0
+                let seq = clockCommand ? 0 : Int(part.data[5]) | Int(part.data[6]) << 8
+                let parts = clockCommand ? 1 : Int(part.data[3]) | Int(part.data[4]) << 8
+                let response = responses && (clockCommand || bulkBarrier.needsResponse(seq: seq, parts: parts,
+                    retry: part.attempts > 1, commandReady: p.canSendWriteWithoutResponse))
                 traceBulk(part, event: "bulk-write", response: response)
                 if response {
                     bulkWriteSerial += 1; let serial = bulkWriteSerial
@@ -419,6 +433,7 @@ final class BleLink: NSObject, ObservableObject {
     }
 
     private func traceBulk(_ part: BleBulkWriteQueue.Part, event: String, response: Bool = true) {
+        guard part.type != 0 else {return}
         guard part.data.count >= BULK_HEADER else { return }
         let seq = Int(part.data[5]) | Int(part.data[6]) << 8
         let count = Int(part.data[3]) | Int(part.data[4]) << 8

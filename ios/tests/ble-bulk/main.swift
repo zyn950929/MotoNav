@@ -101,3 +101,15 @@ check(barrier.needsResponse(seq: 59, parts: 60, retry: false, commandReady: true
 check(barrier.needsResponse(seq: 5, parts: 60, retry: true, commandReady: true), "Failed barrier retry cannot silently become unconfirmed")
 check(barrier.needsResponse(seq: 5, parts: 60, retry: false, commandReady: false), "Host backpressure forces a response barrier")
 print("BLE bulk: \(checks) checks passed; map delivery \(String(format: "%.2f", time))s, \(commands) navigation commands")
+var clockWriter=BleBulkWriteQueue()
+clockWriter.replace(type:3,id:1,packets:[Data([1]),Data([2])])
+let held=clockWriter.next()!
+let clockWire=Data("#TIME,1793433600,28800".utf8)
+clockWriter.replace(type:0,id:1,packets:[clockWire],prioritize:true)
+check(clockWriter.next()==nil && clockWriter.inFlight?.type==held.type,"Clock cannot overlap the in-flight ATT map write")
+_ = clockWriter.complete(success:true)
+let clockPart=clockWriter.next()!
+check(clockPart.type==0 && clockPart.data==clockWire && clockWire.count>20,"Unfragmented clock command receives the next acknowledged ATT slot")
+_ = clockWriter.complete(success:true)
+check(clockWriter.next()?.data==Data([2]),"Map transfer resumes after the clock acknowledgement")
+print("PASS clock ATT serialization, priority and complete message above the default 20-byte limit")

@@ -11,10 +11,11 @@ struct BleBulkWriteQueue {
     var hasData: Bool { inFlight != nil || !parts.isEmpty }
     var canStart: Bool { inFlight == nil && !parts.isEmpty }
     var queuedCount: Int { parts.count }
-    mutating func replace(type: Int, id: Int, packets: [Data]) {
+    mutating func replace(type: Int, id: Int, packets: [Data], prioritize: Bool = false) {
         parts.removeAll { $0.type == type }
         latest[type] = id; acknowledged.removeValue(forKey: type)
-        parts.append(contentsOf: packets.map { Part(type: type, id: id, data: $0) })
+        let incoming=packets.map { Part(type: type, id: id, data: $0) }
+        if prioritize {parts.insert(contentsOf:incoming,at:0)} else {parts.append(contentsOf:incoming)}
     }
     mutating func next() -> Part? {
         guard canStart else { return nil }
